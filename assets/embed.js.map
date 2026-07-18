@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/embed-main.ts"],
+  "sourcesContent": ["/**\n * Embed host for parked sites / ?embed=1 \u2014 WASM hydrate or CSR mount only.\n * Served as `/assets/embed.js`. No React / ReactDOM.\n */\n\nimport './assets/embed.css'\nimport { bootEmbedRoot } from './services/renderRelayHook.ts'\n\nconst rootEl = document.getElementById('root')\nif (!rootEl) {\n  console.error('[embed] missing #root')\n} else {\n  void bootEmbedRoot(rootEl).catch(async (e) => {\n    console.error('[embed] boot failed', e)\n    // SSR markup remains valid static content \u2014 keep it and show a light error panel.\n    if (rootEl.dataset?.relaySsr === '1' && rootEl.childElementCount > 0) {\n      const { renderHookErrorUI } = await import('./vendor/relay-runtime-web.js')\n      renderHookErrorUI(rootEl, e, { keepContent: true, title: 'Hydration error' })\n      return\n    }\n    const { renderHookErrorUI } = await import('./vendor/relay-runtime-web.js')\n    renderHookErrorUI(rootEl, e, { keepContent: false, title: 'Embed error' })\n  })\n}\n"],
+  "mappings": ";;;;;;;AAQA,IAAM,SAAS,SAAS,eAAe,MAAM;AAC7C,IAAI,CAAC,QAAQ;AACX,UAAQ,MAAM,uBAAuB;AACvC,OAAO;AACL,OAAK,cAAc,MAAM,EAAE,MAAM,OAAO,MAAM;AAC5C,YAAQ,MAAM,uBAAuB,CAAC;AAEtC,QAAI,OAAO,SAAS,aAAa,OAAO,OAAO,oBAAoB,GAAG;AACpE,YAAM,EAAE,mBAAAA,mBAAkB,IAAI,MAAM,OAAO,iCAA+B;AAC1E,MAAAA,mBAAkB,QAAQ,GAAG,EAAE,aAAa,MAAM,OAAO,kBAAkB,CAAC;AAC5E;AAAA,IACF;AACA,UAAM,EAAE,kBAAkB,IAAI,MAAM,OAAO,iCAA+B;AAC1E,sBAAkB,QAAQ,GAAG,EAAE,aAAa,OAAO,OAAO,cAAc,CAAC;AAAA,EAC3E,CAAC;AACH;",
+  "names": ["renderHookErrorUI"]
+}
