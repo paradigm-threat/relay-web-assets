@@ -590,8 +590,8 @@ function hydrateElementNode(v, el, invokeHandler, onAfterInvoke, path) {
     return hydrateChildren(children || [], elementChildNodes(el), invokeHandler, onAfterInvoke, here);
   }
   const expect = expectedDomTag(tag);
-  if (expect && el.tagName !== expect) {
-    if (!(expect === "DIV" && el.tagName === "DIV")) {
+  if (expect && String(el.tagName || "").toUpperCase() !== expect) {
+    if (!(expect === "DIV" && String(el.tagName || "").toUpperCase() === "DIV")) {
       console.warn(
         `[relay-runtime] hydrate tag mismatch at ${here}: vnode=${expect} dom=${el.tagName}`
       );
@@ -1201,4 +1201,4 @@ export {
   shouldInterceptRelayControlledAnchorClick,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-4CJUBZCW.js.map
+//# sourceMappingURL=relay-runtime-web-3R5NRH37.js.map
