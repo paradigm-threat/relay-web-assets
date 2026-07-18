@@ -1,9 +1,9 @@
 {
   "schema": "relay.web-assets.v1",
   "profile": "embed-no-react",
-  "builtAt": "2026-07-18T01:14:44Z",
+  "builtAt": "2026-07-18T13:46:43Z",
   "source": {
     "monorepoCommit": "350f40bd78ad3e5cb92f95359ffc8ef2c36aaff9",
-    "relayRuntimeCommit": "5a07357b405b87a1c06c78009bed21d6745bcba8"
+    "relayRuntimeCommit": "c43331ddd5cba23cf8ee8e86cc5a2fd7c1b121ab"
   }
 }
