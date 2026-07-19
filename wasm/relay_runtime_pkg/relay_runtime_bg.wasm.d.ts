@@ -26,11 +26,13 @@ export const set_theme_json: (a: number, b: number, c: number, d: number) => [nu
 export const themed_styler_free_string: (a: number) => void;
 export const themed_styler_render_css: (a: number) => number;
 export const themed_styler_version: () => number;
+export const wasm_bindgen__convert__closures_____invoke__h87e77df39fd906e9: (a: number, b: number) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_exn_store: (a: number) => void;
 export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_destroy_closure: (a: number, b: number) => void;
 export const __externref_table_dealloc: (a: number) => void;
 export const __wbindgen_start: () => void;
