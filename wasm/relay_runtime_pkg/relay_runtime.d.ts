@@ -144,7 +144,7 @@ export interface InitOutput {
     readonly themed_styler_free_string: (a: number) => void;
     readonly themed_styler_render_css: (a: number) => number;
     readonly themed_styler_version: () => number;
-    readonly wasm_bindgen__convert__closures_____invoke__h87e77df39fd906e9: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hddbe6d88714fb62b: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
