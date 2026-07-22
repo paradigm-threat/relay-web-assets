@@ -9,7 +9,7 @@ import {
   run_hook_with_host,
   set_client_live,
   set_theme_and_render
-} from "./chunk-NATHE4XT.js";
+} from "./chunk-U3K3UQHA.js";
 import "./chunk-RPGBVRDM.js";
 
 // src/vendor/relay-runtime-web.js
@@ -910,16 +910,22 @@ async function renderHook(container, options = {}) {
       const n = keyFromPath(k);
       if (n && n !== k) moduleMap[n] = text;
     };
-    for (const h of hooksManifest.hooks || []) {
-      if (!h || !h.path) continue;
-      const u = resolveHookUrl(baseDir, h.path) + cacheBust;
-      const resp = await fetch(u, { headers: branchHeaders });
-      if (resp.ok) {
-        putModule(h.path, await resp.text());
-      } else {
-        console.warn("[relay-runtime] remote hook fetch failed:", h.path, resp.status);
-      }
-    }
+    const hookEntries = (hooksManifest.hooks || []).filter((h) => h && h.path);
+    await Promise.all(
+      hookEntries.map(async (h) => {
+        const u = resolveHookUrl(baseDir, h.path) + cacheBust;
+        try {
+          const resp = await fetch(u, { headers: branchHeaders });
+          if (resp.ok) {
+            putModule(h.path, await resp.text());
+          } else {
+            console.warn("[relay-runtime] remote hook fetch failed:", h.path, resp.status);
+          }
+        } catch (err) {
+          console.warn("[relay-runtime] remote hook fetch error:", h.path, err);
+        }
+      })
+    );
     effectivePath = keyFromPath(entryPath);
     if (!moduleMap[effectivePath]) {
       const srcUrl = resolveHookUrl(baseDir, entryPath) + cacheBust;
@@ -1112,15 +1118,22 @@ async function bootstrap(options = {}) {
     const manifest = hooksResp.ok ? await hooksResp.json() : { hooks: [] };
     const appSource = appResp.ok ? await appResp.text() : "";
     const moduleMap = {};
-    for (const h of manifest.hooks || []) {
-      const url = resolveUrl(baseUrl, h.path) + cacheBust;
-      const resp = await fetch(url);
-      if (resp.ok) {
-        moduleMap[h.path] = await resp.text();
-      } else {
-        console.warn("[relay-runtime] hook fetch failed:", resp.status, h.path, url);
-      }
-    }
+    const bootHooks = (manifest.hooks || []).filter((h) => h && h.path);
+    await Promise.all(
+      bootHooks.map(async (h) => {
+        const url = resolveUrl(baseUrl, h.path) + cacheBust;
+        try {
+          const resp = await fetch(url);
+          if (resp.ok) {
+            moduleMap[h.path] = await resp.text();
+          } else {
+            console.warn("[relay-runtime] hook fetch failed:", resp.status, h.path, url);
+          }
+        } catch (err) {
+          console.warn("[relay-runtime] hook fetch error:", h.path, err);
+        }
+      })
+    );
     const hookCount = (manifest.hooks || []).length;
     const loadedCount = Object.keys(moduleMap).length;
     if (hookCount === 0) {
@@ -1277,4 +1290,4 @@ export {
   shouldInterceptRelayControlledAnchorClick,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-56AUEGFA.js.map
+//# sourceMappingURL=relay-runtime-web-72S5R5MA.js.map
