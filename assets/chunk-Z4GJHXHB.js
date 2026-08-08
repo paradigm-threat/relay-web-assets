@@ -345,6 +345,12 @@ function __wbg_get_imports() {
       const ret = typeof window === "undefined" ? null : window;
       return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
     },
+    __wbg_stringify_a42c95ea9a7591c9: function() {
+      return handleError(function(arg0) {
+        const ret = JSON.stringify(arg0);
+        return ret;
+      }, arguments);
+    },
     __wbg_tagName_f14eef68a292def9: function(arg0, arg1) {
       const ret = arg1.tagName;
       const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -649,4 +655,4 @@ export {
   set_theme_and_render,
   __wbg_init
 };
-//# sourceMappingURL=chunk-L5M2M5MM.js.map
+//# sourceMappingURL=chunk-Z4GJHXHB.js.map
