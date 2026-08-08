@@ -9,7 +9,7 @@ import {
   run_hook_with_host,
   set_client_live,
   set_theme_and_render
-} from "./chunk-U3K3UQHA.js";
+} from "./chunk-L5M2M5MM.js";
 import "./chunk-RPGBVRDM.js";
 
 // src/vendor/relay-runtime-web.js
@@ -37,6 +37,25 @@ function applyInjectedCss() {
 }
 function syncHtmlThemeClass() {
   if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  let tip = "";
+  try {
+    tip = String(root.getAttribute("data-pt-theme") || "").trim();
+  } catch (_) {
+    tip = "";
+  }
+  if (tip === "light" || tip === "dark") {
+    try {
+      root.setAttribute("class", tip);
+    } catch (_) {
+      try {
+        root.classList.remove("light", "dark");
+        root.classList.add(tip);
+      } catch (_2) {
+      }
+    }
+    return;
+  }
   let name = "";
   try {
     if (typeof get_current_theme_name === "function") {
@@ -46,9 +65,17 @@ function syncHtmlThemeClass() {
     return;
   }
   if (name !== "light" && name !== "dark") return;
-  const root = document.documentElement;
   root.classList.remove("light", "dark");
   root.classList.add(name);
+}
+function syncHtmlHydratedAttr(live) {
+  if (typeof document === "undefined") return;
+  try {
+    const root = document.documentElement;
+    if (!root || typeof root.setAttribute !== "function") return;
+    root.setAttribute("data-pt-hydrated", live ? "1" : "0");
+  } catch (_) {
+  }
 }
 var unitlessStyleProperties = /* @__PURE__ */ new Set([
   "animationIterationCount",
@@ -858,6 +885,7 @@ async function renderHook(container, options = {}) {
     if (typeof set_client_live === "function") set_client_live(false);
   } catch (_) {
   }
+  syncHtmlHydratedAttr(false);
   if (host) {
     const base = host.trim().replace(/\/+$/, "");
     const baseDir = `${base}/`;
@@ -1001,6 +1029,7 @@ async function renderHook(container, options = {}) {
             if (typeof set_client_live === "function") set_client_live(true);
           } catch (_) {
           }
+          syncHtmlHydratedAttr(true);
           livePromoted = true;
           doRender();
           return;
@@ -1014,6 +1043,7 @@ async function renderHook(container, options = {}) {
           if (typeof set_client_live === "function") set_client_live(true);
         } catch (_) {
         }
+        syncHtmlHydratedAttr(true);
         livePromoted = true;
         for (let pass = 0; pass < 16; pass++) {
           vnodeJson = run_hook_with_host(
@@ -1290,4 +1320,4 @@ export {
   shouldInterceptRelayControlledAnchorClick,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-72S5R5MA.js.map
+//# sourceMappingURL=relay-runtime-web-OH4C4DLM.js.map
