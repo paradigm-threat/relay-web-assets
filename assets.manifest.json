@@ -1,0 +1,13 @@
+{
+  "schema": "relay.assets-manifest.v1",
+  "assets": [
+    {
+      "id": "wasm_relay_runtime_pkg_relay_runtime_bg.wasm",
+      "path": "wasm/relay_runtime_pkg/relay_runtime_bg.wasm",
+      "ipfs": "bafybeigxnmm3ifkkzwbacjiwy2xczhkdnnf4hdh32azuvpuqfgvg2657te",
+      "contentType": "application/wasm",
+      "sha256": "d7056d2a37ab5d08aaa2e64214a3546ec35cbddb2953b872771bf38bb439c197",
+      "bytes": 1607469
+    }
+  ]
+}

@@ -5,7 +5,7 @@ git:
     branches: ["release"]
     originList:
       - "dfw1.relaygateway.net"
-      - "lon1.relaygateway.net"
+      - "iad1.relaygateway.net"
       - "hkg1.relaygateway.net"
     debounceSeconds: 2
   branchRules:
