@@ -1,0 +1,8 @@
+---
+description: Agent instructions — build, publish, mesh sync
+alwaysApply: true
+---
+
+# Agents
+
+Read [`AGENTS.md`](../../AGENTS.md). Build via **`publish-web-assets.sh`**; **go-live:** `git push iad1 HEAD:release` → gitlab → poll **`/api/sync/mesh/relay-web-assets?branch=release`**. Canon: **`relay-gateway/docs/RELAY_WEB_ASSETS.md`**.

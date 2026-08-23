@@ -1,5 +1,7 @@
 # relay-web-assets
 
+**Assistants:** start at [`AGENTS.md`](AGENTS.md).
+
 Pre-built **embed + WASM** CDN trees for Relay parked sites / SSR hydrate.
 
 - **No npm React** on the `release` tip (`profile: embed-no-react`).
