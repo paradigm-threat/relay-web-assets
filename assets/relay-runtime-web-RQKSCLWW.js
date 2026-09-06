@@ -114,6 +114,133 @@ function syncHtmlHydratedAttr(live, container) {
   } catch (_) {
   }
 }
+function installRumBeacon(container, { hydrateOk = true } = {}) {
+  try {
+    const doc = documentFor(container) || document;
+    const win = doc.defaultView || window;
+    if (!win || typeof win.fetch !== "function") return;
+    const sample = (() => {
+      try {
+        const m = /(?:^|[?&])rum_sample=([0-9.]+)/.exec(win.location.search || "");
+        if (m) return Math.min(1, Math.max(0, parseFloat(m[1])));
+      } catch (_) {
+      }
+      return 1;
+    })();
+    if (Math.random() > sample) return;
+    if (win.__relayRumInstalled) return;
+    win.__relayRumInstalled = true;
+    const t0 = win.performance && performance.now ? performance.now() : Date.now();
+    const payload = {
+      path: win.location && win.location.pathname || "/",
+      embed_oid: null,
+      hydrate_ok: !!hydrateOk,
+      ttfc_ms: null,
+      lcp_ms: null,
+      inp_ms: null,
+      cls: null
+    };
+    try {
+      const scripts = doc.querySelectorAll('script[src*="/assets/"]');
+      for (const s of scripts) {
+        const m = /\/assets\/c\/([0-9a-f]{7,40})\//i.exec(s.src || "");
+        if (m) {
+          payload.embed_oid = m[1];
+          break;
+        }
+      }
+    } catch (_) {
+    }
+    const send = () => {
+      try {
+        const body = JSON.stringify(payload);
+        if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+          const blob = new Blob([body], { type: "application/json" });
+          if (navigator.sendBeacon("/api/rum", blob)) return;
+        }
+        win.fetch("/api/rum", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          keepalive: true
+        }).catch(() => {
+        });
+      } catch (_) {
+      }
+    };
+    let sent = false;
+    const maybeSend = () => {
+      if (sent) return;
+      if (payload.ttfc_ms == null) return;
+      sent = true;
+      setTimeout(send, 2500);
+    };
+    const markTtfc = () => {
+      if (payload.ttfc_ms != null) return;
+      const now = win.performance && performance.now ? performance.now() : Date.now();
+      payload.ttfc_ms = Math.round(now - t0);
+      maybeSend();
+    };
+    try {
+      const nav = doc.querySelector("nav a[href], a[href]");
+      if (nav) {
+        const r = nav.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          const x = Math.min(win.innerWidth - 2, Math.max(2, r.left + 4));
+          const y = Math.min(win.innerHeight - 2, Math.max(2, r.top + 4));
+          const hit = doc.elementFromPoint(x, y);
+          if (hit && (hit === nav || nav.contains(hit))) markTtfc();
+        }
+      }
+    } catch (_) {
+    }
+    try {
+      doc.addEventListener(
+        "pointerdown",
+        (e) => {
+          const a = e.target && e.target.closest && e.target.closest("a[href]");
+          if (a) markTtfc();
+        },
+        { once: true, capture: true }
+      );
+    } catch (_) {
+    }
+    try {
+      if (typeof PerformanceObserver === "function") {
+        const po = new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) {
+            if (e.entryType === "largest-contentful-paint") {
+              payload.lcp_ms = Math.round(e.startTime);
+            } else if (e.entryType === "event" && e.name === "event" && e.duration != null) {
+              const d = e.duration;
+              if (payload.inp_ms == null || d > payload.inp_ms) payload.inp_ms = Math.round(d);
+            } else if (e.entryType === "layout-shift" && !e.hadRecentInput) {
+              payload.cls = (payload.cls || 0) + (e.value || 0);
+            }
+          }
+        });
+        try {
+          po.observe({ type: "largest-contentful-paint", buffered: true });
+        } catch (_) {
+        }
+        try {
+          po.observe({ type: "layout-shift", buffered: true });
+        } catch (_) {
+        }
+        try {
+          po.observe({ type: "event", buffered: true, durationThreshold: 16 });
+        } catch (_) {
+        }
+      }
+    } catch (_) {
+    }
+    setTimeout(() => {
+      if (payload.ttfc_ms == null) markTtfc();
+      maybeSend();
+    }, 3e3);
+  } catch (_) {
+  }
+}
 var unitlessStyleProperties = /* @__PURE__ */ new Set([
   "animationIterationCount",
   "columnCount",
@@ -852,6 +979,104 @@ function hydrateElementNode(v, el, invokeHandler, onAfterInvoke, path) {
   attachHandlersFromProps(el, tag, props || {}, invokeHandler, onAfterInvoke);
   return hydrateChildren(children || [], elementChildNodes(el), invokeHandler, onAfterInvoke, here);
 }
+function computeVnodePatches(oldV, newV) {
+  const acc = [];
+  patchesAt(oldV, newV, [], acc);
+  return acc;
+}
+function vnodeDeepEqual(a, b) {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+function patchesAt(oldV, newV, path, acc) {
+  if (vnodeDeepEqual(oldV, newV)) return;
+  const oEl = oldV && oldV.Element;
+  const nEl = newV && newV.Element;
+  if (oEl && nEl) {
+    const sameTag = oEl.tag === nEl.tag && (oEl.key ?? null) === (nEl.key ?? null);
+    const oKids = oEl.children || [];
+    const nKids = nEl.children || [];
+    if (sameTag && oKids.length === nKids.length) {
+      if (!vnodeDeepEqual(oEl.props || {}, nEl.props || {})) {
+        acc.push({ path: path.slice(), tree: newV });
+        return;
+      }
+      for (let i = 0; i < oKids.length; i++) {
+        patchesAt(oKids[i], nKids[i], path.concat(i), acc);
+      }
+      return;
+    }
+  }
+  const oText = oldV && oldV.Text !== void 0;
+  const nText = newV && newV.Text !== void 0;
+  if (oText && nText && oldV.Text === newV.Text) return;
+  acc.push({ path: path.slice(), tree: newV });
+}
+function vnodeProducesDom(v) {
+  if (!v || v.Empty !== void 0) return false;
+  return true;
+}
+function patchableChildNodes(parent) {
+  const out = [];
+  if (!parent || !parent.childNodes) return out;
+  for (const n of parent.childNodes) {
+    if (n.nodeType === 1 || n.nodeType === 3) out.push(n);
+  }
+  return out;
+}
+function childrenForPatchPath(v) {
+  if (v && v.Element) return v.Element.children || [];
+  if (Array.isArray(v)) return v;
+  return [];
+}
+function applyVnodePatches(container, prevRoot, patches, invokeHandler, onAfterInvoke) {
+  if (!container || !patches || !patches.length) return true;
+  for (const p of patches) {
+    const path = p.path || [];
+    const tree = p.tree;
+    if (path.length === 0) {
+      return false;
+    }
+    let parentDom = container;
+    let vnode = prevRoot;
+    let targetNode = null;
+    for (let d = 0; d < path.length; d++) {
+      const idx = path[d];
+      const kids = childrenForPatchPath(vnode);
+      const domKids = patchableChildNodes(parentDom);
+      let di = 0;
+      let found = null;
+      let foundV = null;
+      for (let i = 0; i < kids.length; i++) {
+        if (!vnodeProducesDom(kids[i])) continue;
+        if (i === idx) {
+          found = domKids[di];
+          foundV = kids[i];
+          break;
+        }
+        di += 1;
+      }
+      if (!found) return false;
+      if (d === path.length - 1) {
+        targetNode = found;
+        break;
+      }
+      parentDom = found;
+      vnode = foundV;
+    }
+    if (!targetNode || !parentDom) return false;
+    const next = vnodeToDom(tree, invokeHandler, onAfterInvoke);
+    if (!next) {
+      parentDom.removeChild(targetNode);
+      continue;
+    }
+    parentDom.replaceChild(next, targetNode);
+  }
+  return true;
+}
 function vnodeToDom(v, invokeHandler = invoke_handler, onAfterInvoke = null) {
   if (!v) return null;
   if (v.Empty !== void 0) return null;
@@ -1082,7 +1307,7 @@ async function renderHook(container, options = {}) {
   let hooksManifest = { hooks: [{ path: effectivePath, name: "Default" }] };
   let hydratedOnce = false;
   let livePromoted = false;
-  let liveUpgradeScheduled = false;
+  let prevVnode = null;
   let themeYamlText = typeof themeYaml === "string" ? themeYaml : "";
   const branchNorm = typeof branch === "string" ? branch.trim() : "";
   const initialPathNorm = typeof initialPath === "string" ? initialPath.trim() : "";
@@ -1111,25 +1336,6 @@ async function renderHook(container, options = {}) {
       }
     } catch (_) {
     }
-  }
-  function scheduleDeferredLiveUpgrade() {
-    if (liveUpgradeScheduled) return;
-    liveUpgradeScheduled = true;
-    const run = () => {
-      try {
-        doRender();
-      } catch (e) {
-        console.error("[relay-runtime] deferred live upgrade failed:", e);
-      }
-    };
-    try {
-      if (typeof requestIdleCallback === "function") {
-        requestIdleCallback(run, { timeout: 2500 });
-        return;
-      }
-    } catch (_) {
-    }
-    setTimeout(run, 50);
   }
   try {
     setBootStatus(container, { phase: "wasm", message: "Preparing runtime\u2026" });
@@ -1299,7 +1505,7 @@ async function renderHook(container, options = {}) {
         setRelayFetchBranch(branchNorm);
       }
     }
-    const doRender2 = () => {
+    const doRender = () => {
       try {
         setBootStatus(container, { phase: "render", message: "Rendering UI\u2026" });
         injectHostManifestFields(hooksManifest, container);
@@ -1318,9 +1524,10 @@ async function renderHook(container, options = {}) {
         let vnode = JSON.parse(vnodeJson);
         const tryHydrate = wantHydrate && !hydratedOnce && container.dataset?.relaySsr === "1";
         if (tryHydrate) {
-          const ok = hydrateVnode(vnode, container, invoke_handler, doRender2);
+          const ok = hydrateVnode(vnode, container, invoke_handler, doRender);
           if (ok) {
             hydratedOnce = true;
+            prevVnode = vnode;
             container.dataset.relayHydrated = "1";
             try {
               if (typeof set_client_live === "function") set_client_live(true);
@@ -1330,10 +1537,27 @@ async function renderHook(container, options = {}) {
             livePromoted = true;
             enableClientOnlyChrome(container);
             setBootStatus(container, { phase: "live", message: "Ready" });
-            scheduleDeferredLiveUpgrade();
+            installRumBeacon(container, { hydrateOk: true });
             return;
           }
           console.warn("[relay-runtime] SSR hydrate mismatch; falling back to client render");
+        }
+        if (livePromoted && prevVnode && container.childNodes && container.childNodes.length > 0) {
+          try {
+            const patchList = computeVnodePatches(prevVnode, vnode);
+            if (patchList.length === 0) {
+              prevVnode = vnode;
+              setBootStatus(container, { phase: "live", message: "Ready" });
+              return;
+            }
+            if (applyVnodePatches(container, prevVnode, patchList, invoke_handler, doRender)) {
+              prevVnode = vnode;
+              setBootStatus(container, { phase: "live", message: "Ready" });
+              return;
+            }
+          } catch (e) {
+            console.warn("[relay-runtime] applyPatches failed; full replace", e);
+          }
         }
         container.innerHTML = "";
         delete container.dataset.relaySsr;
@@ -1359,8 +1583,9 @@ async function renderHook(container, options = {}) {
           applyInjectedCss(container);
           vnode = JSON.parse(vnodeJson);
         }
-        const el = vnodeToDom(vnode, invoke_handler, doRender2);
+        const el = vnodeToDom(vnode, invoke_handler, doRender);
         if (el) container.appendChild(el);
+        prevVnode = vnode;
         if (livePromoted) {
           setBootStatus(container, { phase: "live", message: "Ready" });
         }
@@ -1373,9 +1598,9 @@ async function renderHook(container, options = {}) {
       }
     };
     installEmbedActionDelegation(container, () => {
-      doRender2();
+      doRender();
     });
-    doRender2();
+    doRender();
   } catch (e) {
     const msg = formatRuntimeErrorMessage(e?.message ?? e ?? "Boot failed");
     setBootStatus(container, { phase: "error", message: "Boot failed", detail: msg });
@@ -1510,7 +1735,7 @@ async function bootstrap(options = {}) {
         baseUrl
       });
     }
-    const doRender2 = () => {
+    const doRender = () => {
       try {
         let vnodeJson;
         try {
@@ -1531,7 +1756,7 @@ async function bootstrap(options = {}) {
         applyInjectedCss(root);
         root.innerHTML = "";
         const vnode = JSON.parse(vnodeJson);
-        const el = vnodeToDom(vnode, invoke_handler, doRender2);
+        const el = vnodeToDom(vnode, invoke_handler, doRender);
         if (el) {
           root.appendChild(el);
         } else {
@@ -1548,7 +1773,7 @@ async function bootstrap(options = {}) {
         throw e;
       }
     };
-    doRender2();
+    doRender();
     root.addEventListener("click", (e) => {
       const theme = e.target?.dataset?.theme;
       if (theme) {
@@ -1637,13 +1862,16 @@ function installEmbedActionDelegation(root, onThemeChange) {
 }
 export {
   IMPORT_CLOSURE_MAX_MODULES,
+  applyVnodePatches,
   bootstrap,
+  computeVnodePatches,
   documentFor,
   ensureStyleElement,
   getBootStatus,
   getThemes,
   hydrateVnode,
   installRelayHostFetch,
+  installRumBeacon,
   localImportSpecs,
   looksLikeHookSource,
   preloadImportClosure,
@@ -1663,4 +1891,4 @@ export {
   themeTargetFor,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-P56PMKDB.js.map
+//# sourceMappingURL=relay-runtime-web-RQKSCLWW.js.map
