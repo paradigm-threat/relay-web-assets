@@ -9,11 +9,15 @@ import {
   run_hook_with_host,
   set_client_live,
   set_theme_and_render
-} from "./chunk-QZUDJNU4.js";
+} from "./chunk-I7OUOC2F.js";
 import "./chunk-RPGBVRDM.js";
 
 // src/vendor/relay-runtime-web.js
 var _styleId = "relay-ssr-theme";
+function documentFor(container) {
+  if (container && container.ownerDocument) return container.ownerDocument;
+  return typeof document !== "undefined" ? document : null;
+}
 function styleParentFor(container) {
   if (container && typeof container.getRootNode === "function") {
     const root = container.getRootNode();
@@ -21,7 +25,8 @@ function styleParentFor(container) {
       return root;
     }
   }
-  return typeof document !== "undefined" ? document.head : null;
+  const doc = documentFor(container);
+  return doc ? doc.head : null;
 }
 function themeTargetFor(container) {
   if (container && typeof container.getRootNode === "function") {
@@ -30,27 +35,36 @@ function themeTargetFor(container) {
       return container.closest?.('[data-relay-theme-scope="hook"]') || root.querySelector?.('[data-relay-theme-scope="hook"]') || container;
     }
   }
-  return typeof document !== "undefined" ? document.documentElement : null;
+  const doc = documentFor(container);
+  return doc ? doc.documentElement : null;
 }
 function ensureStyleElement(id, parent) {
-  if (typeof document === "undefined" || !parent) return null;
-  let el = parent.querySelector ? parent.querySelector(`#${id}`) : null;
-  if (!el && parent === document.head) {
-    el = document.getElementById(id);
+  if (!parent) return null;
+  const doc = parent.ownerDocument || (typeof document !== "undefined" ? document : null);
+  if (!doc) return null;
+  let el = parent.querySelector ? parent.querySelector(`style#${id}`) : null;
+  if (!el && typeof doc.getElementById === "function") {
+    const existing = doc.getElementById(id);
+    if (existing && existing.tagName === "STYLE" && existing.ownerDocument === doc) {
+      parent.appendChild(existing);
+      el = existing;
+    }
   }
   if (!el) {
-    el = document.createElement("style");
+    el = doc.createElement("style");
     el.id = id;
-    if (parent === document.head) parent.appendChild(el);
-    else parent.insertBefore(el, parent.firstChild);
+    parent.appendChild(el);
+  } else if (el.parentNode !== parent) {
+    parent.appendChild(el);
   }
   return el;
 }
 function applyInjectedCss(container) {
   try {
     const css = typeof get_injected_css === "function" ? get_injected_css() : "";
+    const parent = styleParentFor(container);
     if (css && String(css).trim()) {
-      const styleEl = ensureStyleElement(_styleId, styleParentFor(container));
+      const styleEl = ensureStyleElement(_styleId, parent);
       if (styleEl) styleEl.textContent = String(css);
     }
   } catch (_) {
@@ -90,10 +104,11 @@ function syncHtmlThemeClass(target) {
   root.classList.remove("light", "dark");
   root.classList.add(name);
 }
-function syncHtmlHydratedAttr(live) {
-  if (typeof document === "undefined") return;
+function syncHtmlHydratedAttr(live, container) {
+  const doc = documentFor(container);
+  if (!doc) return;
   try {
-    const root = document.documentElement;
+    const root = doc.documentElement;
     if (!root || typeof root.setAttribute !== "function") return;
     root.setAttribute("data-pt-hydrated", live ? "1" : "0");
   } catch (_) {
@@ -707,11 +722,17 @@ function propBoolFromVnodeProps(props, key) {
 function shouldInterceptRelayControlledAnchorClick(e, el) {
   if (e.defaultPrevented || e.button !== 0) return false;
   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+  try {
+    const doc = el && el.ownerDocument ? el.ownerDocument : document;
+    if (doc?.documentElement?.getAttribute?.("data-pt-hydrated") !== "1") return false;
+  } catch (_) {
+  }
   const t = el.getAttribute("target");
   if (t && t !== "_self") return false;
   const href = el.getAttribute("href");
   if (!href) return true;
   if (/^(mailto:|tel:|#)/i.test(href)) return false;
+  if (/^(https?:|\/\/)/i.test(href)) return false;
   return true;
 }
 function attachHandlersFromProps(el, tag, props, invokeHandler, onAfterInvoke) {
@@ -1061,16 +1082,62 @@ async function renderHook(container, options = {}) {
   let hooksManifest = { hooks: [{ path: effectivePath, name: "Default" }] };
   let hydratedOnce = false;
   let livePromoted = false;
+  let liveUpgradeScheduled = false;
   let themeYamlText = typeof themeYaml === "string" ? themeYaml : "";
   const branchNorm = typeof branch === "string" ? branch.trim() : "";
   const initialPathNorm = typeof initialPath === "string" ? initialPath.trim() : "";
+  function enableClientOnlyChrome(root) {
+    try {
+      const scope = root && root.querySelectorAll ? root : document;
+      const nodes = scope.querySelectorAll(".pt-client-only");
+      for (let i = 0; i < nodes.length; i++) {
+        const el = nodes[i];
+        try {
+          if (el.disabled) el.disabled = false;
+        } catch (_) {
+        }
+        try {
+          if (el.getAttribute("aria-disabled") === "true") {
+            el.setAttribute("aria-disabled", "false");
+          }
+        } catch (_) {
+        }
+        try {
+          if (el.hasAttribute("title") && /after page loads/i.test(el.getAttribute("title") || "")) {
+            el.removeAttribute("title");
+          }
+        } catch (_) {
+        }
+      }
+    } catch (_) {
+    }
+  }
+  function scheduleDeferredLiveUpgrade() {
+    if (liveUpgradeScheduled) return;
+    liveUpgradeScheduled = true;
+    const run = () => {
+      try {
+        doRender();
+      } catch (e) {
+        console.error("[relay-runtime] deferred live upgrade failed:", e);
+      }
+    };
+    try {
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(run, { timeout: 2500 });
+        return;
+      }
+    } catch (_) {
+    }
+    setTimeout(run, 50);
+  }
   try {
     setBootStatus(container, { phase: "wasm", message: "Preparing runtime\u2026" });
     try {
       if (typeof set_client_live === "function") set_client_live(false);
     } catch (_) {
     }
-    syncHtmlHydratedAttr(false);
+    syncHtmlHydratedAttr(false, container);
     if (host) {
       setBootStatus(container, { phase: "manifest", message: "Discovering hooks\u2026" });
       const base = host.trim().replace(/\/+$/, "");
@@ -1232,7 +1299,7 @@ async function renderHook(container, options = {}) {
         setRelayFetchBranch(branchNorm);
       }
     }
-    const doRender = () => {
+    const doRender2 = () => {
       try {
         setBootStatus(container, { phase: "render", message: "Rendering UI\u2026" });
         injectHostManifestFields(hooksManifest, container);
@@ -1251,7 +1318,7 @@ async function renderHook(container, options = {}) {
         let vnode = JSON.parse(vnodeJson);
         const tryHydrate = wantHydrate && !hydratedOnce && container.dataset?.relaySsr === "1";
         if (tryHydrate) {
-          const ok = hydrateVnode(vnode, container, invoke_handler, doRender);
+          const ok = hydrateVnode(vnode, container, invoke_handler, doRender2);
           if (ok) {
             hydratedOnce = true;
             container.dataset.relayHydrated = "1";
@@ -1259,10 +1326,11 @@ async function renderHook(container, options = {}) {
               if (typeof set_client_live === "function") set_client_live(true);
             } catch (_) {
             }
-            syncHtmlHydratedAttr(true);
+            syncHtmlHydratedAttr(true, container);
             livePromoted = true;
+            enableClientOnlyChrome(container);
             setBootStatus(container, { phase: "live", message: "Ready" });
-            doRender();
+            scheduleDeferredLiveUpgrade();
             return;
           }
           console.warn("[relay-runtime] SSR hydrate mismatch; falling back to client render");
@@ -1274,7 +1342,7 @@ async function renderHook(container, options = {}) {
             if (typeof set_client_live === "function") set_client_live(true);
           } catch (_) {
           }
-          syncHtmlHydratedAttr(true);
+          syncHtmlHydratedAttr(true, container);
           livePromoted = true;
           setBootStatus(container, { phase: "live", message: "Ready" });
           injectHostManifestFields(hooksManifest, container);
@@ -1291,7 +1359,7 @@ async function renderHook(container, options = {}) {
           applyInjectedCss(container);
           vnode = JSON.parse(vnodeJson);
         }
-        const el = vnodeToDom(vnode, invoke_handler, doRender);
+        const el = vnodeToDom(vnode, invoke_handler, doRender2);
         if (el) container.appendChild(el);
         if (livePromoted) {
           setBootStatus(container, { phase: "live", message: "Ready" });
@@ -1305,9 +1373,9 @@ async function renderHook(container, options = {}) {
       }
     };
     installEmbedActionDelegation(container, () => {
-      doRender();
+      doRender2();
     });
-    doRender();
+    doRender2();
   } catch (e) {
     const msg = formatRuntimeErrorMessage(e?.message ?? e ?? "Boot failed");
     setBootStatus(container, { phase: "error", message: "Boot failed", detail: msg });
@@ -1442,7 +1510,7 @@ async function bootstrap(options = {}) {
         baseUrl
       });
     }
-    const doRender = () => {
+    const doRender2 = () => {
       try {
         let vnodeJson;
         try {
@@ -1463,7 +1531,7 @@ async function bootstrap(options = {}) {
         applyInjectedCss(root);
         root.innerHTML = "";
         const vnode = JSON.parse(vnodeJson);
-        const el = vnodeToDom(vnode, invoke_handler, doRender);
+        const el = vnodeToDom(vnode, invoke_handler, doRender2);
         if (el) {
           root.appendChild(el);
         } else {
@@ -1480,7 +1548,7 @@ async function bootstrap(options = {}) {
         throw e;
       }
     };
-    doRender();
+    doRender2();
     root.addEventListener("click", (e) => {
       const theme = e.target?.dataset?.theme;
       if (theme) {
@@ -1570,6 +1638,8 @@ function installEmbedActionDelegation(root, onThemeChange) {
 export {
   IMPORT_CLOSURE_MAX_MODULES,
   bootstrap,
+  documentFor,
+  ensureStyleElement,
   getBootStatus,
   getThemes,
   hydrateVnode,
@@ -1588,6 +1658,9 @@ export {
   setRelayFetchBaseUrl,
   setRelayFetchBranch,
   shouldInterceptRelayControlledAnchorClick,
+  styleParentFor,
+  syncHtmlHydratedAttr,
+  themeTargetFor,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-FT3DWOZP.js.map
+//# sourceMappingURL=relay-runtime-web-P56PMKDB.js.map
