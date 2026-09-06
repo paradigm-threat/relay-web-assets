@@ -1379,6 +1379,8 @@ async function renderHook(container, options = {}) {
     } catch (_) {
     }
   }
+  let renderHookPass = () => {
+  };
   function scheduleDeferredLiveUpgrade() {
     if (liveUpgradeScheduled) return;
     liveUpgradeScheduled = true;
@@ -1405,7 +1407,7 @@ async function renderHook(container, options = {}) {
       }
       syncHtmlLivePhaseAttr(phase, container);
       try {
-        doRender();
+        renderHookPass();
       } catch (e) {
         console.error("[relay-runtime] live phase", phase, "failed:", e);
       }
@@ -1611,7 +1613,7 @@ async function renderHook(container, options = {}) {
         setRelayFetchBranch(branchNorm);
       }
     }
-    const doRender2 = () => {
+    renderHookPass = () => {
       try {
         setBootStatus(container, { phase: "render", message: "Rendering UI\u2026" });
         injectHostManifestFields(hooksManifest, container);
@@ -1630,7 +1632,7 @@ async function renderHook(container, options = {}) {
         let vnode = JSON.parse(vnodeJson);
         const tryHydrate = wantHydrate && !hydratedOnce && container.dataset?.relaySsr === "1";
         if (tryHydrate) {
-          const ok = hydrateVnode(vnode, container, invoke_handler, doRender2);
+          const ok = hydrateVnode(vnode, container, invoke_handler, renderHookPass);
           if (ok) {
             hydratedOnce = true;
             prevVnode = vnode;
@@ -1661,7 +1663,7 @@ async function renderHook(container, options = {}) {
               setBootStatus(container, { phase: "live", message: "Ready" });
               return;
             }
-            if (applyVnodePatches(container, prevVnode, patchList, invoke_handler, doRender2)) {
+            if (applyVnodePatches(container, prevVnode, patchList, invoke_handler, renderHookPass)) {
               prevVnode = vnode;
               setBootStatus(container, { phase: "live", message: "Ready" });
               return;
@@ -1698,7 +1700,7 @@ async function renderHook(container, options = {}) {
           applyInjectedCss(container);
           vnode = JSON.parse(vnodeJson);
         }
-        const el = vnodeToDom(vnode, invoke_handler, doRender2);
+        const el = vnodeToDom(vnode, invoke_handler, renderHookPass);
         if (el) container.appendChild(el);
         prevVnode = vnode;
         if (livePromoted) {
@@ -1715,11 +1717,11 @@ async function renderHook(container, options = {}) {
       }
     };
     installEmbedActionDelegation(container, () => {
-      doRender2();
+      renderHookPass();
     });
     setBootStatus(container, { phase: "render", message: "Preparing UI\u2026" });
     await yieldToMain();
-    doRender2();
+    renderHookPass();
   } catch (e) {
     const msg = formatRuntimeErrorMessage(e?.message ?? e ?? "Boot failed");
     setBootStatus(container, { phase: "error", message: "Boot failed", detail: msg });
@@ -1854,7 +1856,7 @@ async function bootstrap(options = {}) {
         baseUrl
       });
     }
-    const doRender2 = () => {
+    const doRender = () => {
       try {
         let vnodeJson;
         try {
@@ -1875,7 +1877,7 @@ async function bootstrap(options = {}) {
         applyInjectedCss(root);
         root.innerHTML = "";
         const vnode = JSON.parse(vnodeJson);
-        const el = vnodeToDom(vnode, invoke_handler, doRender2);
+        const el = vnodeToDom(vnode, invoke_handler, doRender);
         if (el) {
           root.appendChild(el);
         } else {
@@ -1892,7 +1894,7 @@ async function bootstrap(options = {}) {
         throw e;
       }
     };
-    doRender2();
+    doRender();
     root.addEventListener("click", (e) => {
       const theme = e.target?.dataset?.theme;
       if (theme) {
@@ -2011,4 +2013,4 @@ export {
   themeTargetFor,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-HSBT7JSE.js.map
+//# sourceMappingURL=relay-runtime-web-FXUQ7CX6.js.map
