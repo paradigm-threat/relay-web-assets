@@ -14,6 +14,25 @@ import "./chunk-RPGBVRDM.js";
 
 // src/vendor/relay-runtime-web.js
 var _styleId = "relay-ssr-theme";
+function yieldToMain() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof scheduler !== "undefined" && typeof scheduler.yield === "function") {
+        scheduler.yield().then(resolve, () => setTimeout(resolve, 0));
+        return;
+      }
+    } catch (_) {
+    }
+    try {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+        return;
+      }
+    } catch (_) {
+    }
+    setTimeout(resolve, 0);
+  });
+}
 function documentFor(container) {
   if (container && container.ownerDocument) return container.ownerDocument;
   return typeof document !== "undefined" ? document : null;
@@ -1307,6 +1326,7 @@ async function renderHook(container, options = {}) {
   let hooksManifest = { hooks: [{ path: effectivePath, name: "Default" }] };
   let hydratedOnce = false;
   let livePromoted = false;
+  let liveUpgradeScheduled = false;
   let prevVnode = null;
   let themeYamlText = typeof themeYaml === "string" ? themeYaml : "";
   const branchNorm = typeof branch === "string" ? branch.trim() : "";
@@ -1336,6 +1356,37 @@ async function renderHook(container, options = {}) {
       }
     } catch (_) {
     }
+  }
+  function scheduleDeferredLiveUpgrade() {
+    if (liveUpgradeScheduled) return;
+    liveUpgradeScheduled = true;
+    const run = () => {
+      try {
+        doRender();
+      } catch (e) {
+        console.error("[relay-runtime] deferred live upgrade failed:", e);
+      }
+    };
+    const kick = () => {
+      try {
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(run, { timeout: 4e3 });
+          return;
+        }
+      } catch (_) {
+      }
+      setTimeout(run, 120);
+    };
+    try {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(kick);
+        });
+        return;
+      }
+    } catch (_) {
+    }
+    setTimeout(kick, 0);
   }
   try {
     setBootStatus(container, { phase: "wasm", message: "Preparing runtime\u2026" });
@@ -1505,7 +1556,7 @@ async function renderHook(container, options = {}) {
         setRelayFetchBranch(branchNorm);
       }
     }
-    const doRender = () => {
+    const doRender2 = () => {
       try {
         setBootStatus(container, { phase: "render", message: "Rendering UI\u2026" });
         injectHostManifestFields(hooksManifest, container);
@@ -1524,7 +1575,7 @@ async function renderHook(container, options = {}) {
         let vnode = JSON.parse(vnodeJson);
         const tryHydrate = wantHydrate && !hydratedOnce && container.dataset?.relaySsr === "1";
         if (tryHydrate) {
-          const ok = hydrateVnode(vnode, container, invoke_handler, doRender);
+          const ok = hydrateVnode(vnode, container, invoke_handler, doRender2);
           if (ok) {
             hydratedOnce = true;
             prevVnode = vnode;
@@ -1538,6 +1589,7 @@ async function renderHook(container, options = {}) {
             enableClientOnlyChrome(container);
             setBootStatus(container, { phase: "live", message: "Ready" });
             installRumBeacon(container, { hydrateOk: true });
+            scheduleDeferredLiveUpgrade();
             return;
           }
           console.warn("[relay-runtime] SSR hydrate mismatch; falling back to client render");
@@ -1550,7 +1602,7 @@ async function renderHook(container, options = {}) {
               setBootStatus(container, { phase: "live", message: "Ready" });
               return;
             }
-            if (applyVnodePatches(container, prevVnode, patchList, invoke_handler, doRender)) {
+            if (applyVnodePatches(container, prevVnode, patchList, invoke_handler, doRender2)) {
               prevVnode = vnode;
               setBootStatus(container, { phase: "live", message: "Ready" });
               return;
@@ -1583,11 +1635,12 @@ async function renderHook(container, options = {}) {
           applyInjectedCss(container);
           vnode = JSON.parse(vnodeJson);
         }
-        const el = vnodeToDom(vnode, invoke_handler, doRender);
+        const el = vnodeToDom(vnode, invoke_handler, doRender2);
         if (el) container.appendChild(el);
         prevVnode = vnode;
         if (livePromoted) {
           setBootStatus(container, { phase: "live", message: "Ready" });
+          installRumBeacon(container, { hydrateOk: !!container.dataset?.relayHydrated });
         }
       } catch (e) {
         renderHookErrorUI(container, e, {
@@ -1598,9 +1651,11 @@ async function renderHook(container, options = {}) {
       }
     };
     installEmbedActionDelegation(container, () => {
-      doRender();
+      doRender2();
     });
-    doRender();
+    setBootStatus(container, { phase: "render", message: "Preparing UI\u2026" });
+    await yieldToMain();
+    doRender2();
   } catch (e) {
     const msg = formatRuntimeErrorMessage(e?.message ?? e ?? "Boot failed");
     setBootStatus(container, { phase: "error", message: "Boot failed", detail: msg });
@@ -1735,7 +1790,7 @@ async function bootstrap(options = {}) {
         baseUrl
       });
     }
-    const doRender = () => {
+    const doRender2 = () => {
       try {
         let vnodeJson;
         try {
@@ -1756,7 +1811,7 @@ async function bootstrap(options = {}) {
         applyInjectedCss(root);
         root.innerHTML = "";
         const vnode = JSON.parse(vnodeJson);
-        const el = vnodeToDom(vnode, invoke_handler, doRender);
+        const el = vnodeToDom(vnode, invoke_handler, doRender2);
         if (el) {
           root.appendChild(el);
         } else {
@@ -1773,7 +1828,7 @@ async function bootstrap(options = {}) {
         throw e;
       }
     };
-    doRender();
+    doRender2();
     root.addEventListener("click", (e) => {
       const theme = e.target?.dataset?.theme;
       if (theme) {
@@ -1891,4 +1946,4 @@ export {
   themeTargetFor,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-RQKSCLWW.js.map
+//# sourceMappingURL=relay-runtime-web-F37LAE6Z.js.map
