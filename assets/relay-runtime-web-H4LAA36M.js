@@ -1076,24 +1076,41 @@ function cssEscapeIdent(s) {
 }
 function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfterInvoke) {
   if (!container || !vnode) return false;
-  const placeholders = container.querySelectorAll(SSR_PLACEHOLDER_SELECTORS);
-  if (!placeholders.length) return false;
   const searchRoot = vnodeToDom(vnode, invokeHandler, onAfterInvoke);
   if (!searchRoot || typeof searchRoot.querySelectorAll !== "function") return false;
+  const targets = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (el) => {
+    if (!el || seen.has(el)) return;
+    seen.add(el);
+    targets.push(el);
+  };
+  container.querySelectorAll(SSR_PLACEHOLDER_SELECTORS).forEach(add);
+  ;
+  ["Directory", "Change log", "Auto index"].forEach((label) => {
+    container.querySelectorAll(`[aria-label="${cssEscapeIdent(label)}"]`).forEach(add);
+  });
+  if (!targets.length) return false;
   let replaced = 0;
-  for (let i = 0; i < placeholders.length; i++) {
-    const oldEl = placeholders[i];
+  for (let i = 0; i < targets.length; i++) {
+    const oldEl = targets[i];
+    if (!oldEl.isConnected) continue;
     let next = null;
     const label = oldEl.getAttribute("aria-label");
     if (label) {
       next = searchRoot.querySelector(`[aria-label="${cssEscapeIdent(label)}"]`);
     }
     if (!next) {
-      if (oldEl.hasAttribute("data-pt-dirnav-ssr")) next = searchRoot.querySelector(".pt-dir-nav");
-      else if (oldEl.hasAttribute("data-pt-changelog-ssr")) next = searchRoot.querySelector(".pt-changelog");
-      else if (oldEl.hasAttribute("data-pt-autoindex-ssr")) next = searchRoot.querySelector(".pt-autoindex");
+      if (oldEl.classList?.contains("pt-dir-nav") || oldEl.hasAttribute("data-pt-dirnav-ssr")) {
+        next = searchRoot.querySelector(".pt-dir-nav");
+      } else if (oldEl.classList?.contains("pt-changelog") || oldEl.hasAttribute("data-pt-changelog-ssr")) {
+        next = searchRoot.querySelector(".pt-changelog");
+      } else if (oldEl.classList?.contains("pt-autoindex") || oldEl.hasAttribute("data-pt-autoindex-ssr")) {
+        next = searchRoot.querySelector(".pt-autoindex");
+      }
     }
     if (!next || !oldEl.parentNode) continue;
+    if (container.contains(next)) continue;
     try {
       oldEl.parentNode.replaceChild(next, oldEl);
       replaced += 1;
@@ -1725,6 +1742,16 @@ async function renderHook(container, options = {}) {
           return;
         }
         if (livePromoted && prevVnode && container.childNodes && container.childNodes.length > 0) {
+          if (container.dataset?.relaySsr === "1") {
+            try {
+              replaceSsrPlaceholdersFromVnode(container, vnode, invoke_handler, renderHookPass);
+            } catch (e) {
+              console.warn("[relay-runtime] placeholder replace failed; keeping SSR", e);
+            }
+            prevVnode = vnode;
+            setBootStatus(container, { phase: "live", message: "Ready" });
+            return;
+          }
           try {
             const patchList = computeVnodePatches(prevVnode, vnode);
             if (patchList.length === 0) {
@@ -1738,21 +1765,7 @@ async function renderHook(container, options = {}) {
               return;
             }
           } catch (e) {
-            console.warn("[relay-runtime] applyPatches failed; trying placeholder replace", e);
-          }
-          if (container.dataset?.relaySsr === "1") {
-            try {
-              if (replaceSsrPlaceholdersFromVnode(container, vnode, invoke_handler, renderHookPass)) {
-                prevVnode = vnode;
-                setBootStatus(container, { phase: "live", message: "Ready" });
-                return;
-              }
-            } catch (e2) {
-              console.warn("[relay-runtime] placeholder replace failed; keeping SSR", e2);
-            }
-            prevVnode = vnode;
-            setBootStatus(container, { phase: "live", message: "Ready" });
-            return;
+            console.warn("[relay-runtime] applyPatches failed; full replace", e);
           }
         }
         if (container.dataset?.relaySsr === "1") {
@@ -2108,4 +2121,4 @@ export {
   themeTargetFor,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-EU7GIGOA.js.map
+//# sourceMappingURL=relay-runtime-web-H4LAA36M.js.map

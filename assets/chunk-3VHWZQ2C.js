@@ -24,7 +24,7 @@ async function ensureRelayRuntimeInit() {
 }
 async function mountRelayHookIntoElement(el, opts) {
   await ensureRelayRuntimeInit();
-  const { renderHook, installRelayHostFetch } = await import("./relay-runtime-web-EU7GIGOA.js");
+  const { renderHook, installRelayHostFetch } = await import("./relay-runtime-web-H4LAA36M.js");
   installRelayHostFetch();
   const raw = opts.hookPath ?? "hooks/client/get.jsx";
   const hookPath = raw.startsWith("/") ? raw.slice(1) : raw;
@@ -81,4 +81,4 @@ export {
   hydrateEmbedRoot,
   bootEmbedRoot
 };
-//# sourceMappingURL=chunk-LRJBAAKY.js.map
+//# sourceMappingURL=chunk-3VHWZQ2C.js.map
