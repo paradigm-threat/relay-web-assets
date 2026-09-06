@@ -35,6 +35,32 @@ function yieldToMain() {
     setTimeout(resolve, 0);
   });
 }
+async function yieldForInteractive(preferIdleMs = 120) {
+  await yieldToMain();
+  await new Promise((resolve) => {
+    try {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve());
+        });
+        return;
+      }
+    } catch (_) {
+    }
+    setTimeout(resolve, 0);
+  });
+  await yieldToMain();
+  await new Promise((resolve) => {
+    try {
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(() => resolve(), { timeout: Math.max(0, preferIdleMs | 0) });
+        return;
+      }
+    } catch (_) {
+    }
+    setTimeout(resolve, 0);
+  });
+}
 function documentFor(container) {
   if (container && container.ownerDocument) return container.ownerDocument;
   return typeof document !== "undefined" ? document : null;
@@ -1826,7 +1852,11 @@ async function renderHook(container, options = {}) {
       renderHookPass();
     });
     setBootStatus(container, { phase: "render", message: "Preparing UI\u2026" });
-    await yieldToMain();
+    if (wantHydrate && container.dataset?.relaySsr === "1") {
+      await yieldForInteractive(120);
+    } else {
+      await yieldToMain();
+    }
     renderHookPass();
   } catch (e) {
     const msg = formatRuntimeErrorMessage(e?.message ?? e ?? "Boot failed");
@@ -2119,6 +2149,7 @@ export {
   syncHtmlHydratedAttr,
   syncHtmlLivePhaseAttr,
   themeTargetFor,
-  vnodeToDom
+  vnodeToDom,
+  yieldForInteractive
 };
-//# sourceMappingURL=relay-runtime-web-H4LAA36M.js.map
+//# sourceMappingURL=relay-runtime-web-5ISHIM2G.js.map
