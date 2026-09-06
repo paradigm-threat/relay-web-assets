@@ -3,6 +3,10 @@ function consume_render_requested() {
   const ret = wasm.consume_render_requested();
   return ret !== 0;
 }
+function get_client_live_phase() {
+  const ret = wasm.get_client_live_phase();
+  return ret >>> 0;
+}
 function get_current_theme_name() {
   let deferred1_0;
   let deferred1_1;
@@ -81,6 +85,9 @@ function run_hook_with_host(source, module_map_json, theme_yaml, hooks_manifest_
 }
 function set_client_live(live) {
   wasm.set_client_live(live);
+}
+function set_client_live_phase(phase) {
+  wasm.set_client_live_phase(phase);
 }
 function set_theme_and_render(theme_name) {
   let deferred2_0;
@@ -644,6 +651,7 @@ async function __wbg_init(module_or_path) {
 
 export {
   consume_render_requested,
+  get_client_live_phase,
   get_current_theme_name,
   get_injected_css,
   get_themes,
@@ -651,7 +659,8 @@ export {
   push_message_from_host,
   run_hook_with_host,
   set_client_live,
+  set_client_live_phase,
   set_theme_and_render,
   __wbg_init
 };
-//# sourceMappingURL=chunk-I7OUOC2F.js.map
+//# sourceMappingURL=chunk-F7T5I4X3.js.map

@@ -1,6 +1,6 @@
 import {
   __wbg_init
-} from "./chunk-I7OUOC2F.js";
+} from "./chunk-F7T5I4X3.js";
 
 // src/services/renderRelayHook.ts
 var RELAY_RUNTIME_WASM_WEB_PATH = "/wasm/relay_runtime_pkg/relay_runtime_bg.wasm";
@@ -24,7 +24,7 @@ async function ensureRelayRuntimeInit() {
 }
 async function mountRelayHookIntoElement(el, opts) {
   await ensureRelayRuntimeInit();
-  const { renderHook, installRelayHostFetch } = await import("./relay-runtime-web-F37LAE6Z.js");
+  const { renderHook, installRelayHostFetch } = await import("./relay-runtime-web-VMCHPOBP.js");
   installRelayHostFetch();
   const raw = opts.hookPath ?? "hooks/client/get.jsx";
   const hookPath = raw.startsWith("/") ? raw.slice(1) : raw;
@@ -81,4 +81,4 @@ export {
   hydrateEmbedRoot,
   bootEmbedRoot
 };
-//# sourceMappingURL=chunk-TLH3DC2M.js.map
+//# sourceMappingURL=chunk-ENDKVHZN.js.map

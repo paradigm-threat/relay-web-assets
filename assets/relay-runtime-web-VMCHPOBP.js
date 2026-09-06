@@ -1,6 +1,7 @@
 import {
   __wbg_init,
   consume_render_requested,
+  get_client_live_phase,
   get_current_theme_name,
   get_injected_css,
   get_themes,
@@ -8,8 +9,9 @@ import {
   push_message_from_host,
   run_hook_with_host,
   set_client_live,
+  set_client_live_phase,
   set_theme_and_render
-} from "./chunk-I7OUOC2F.js";
+} from "./chunk-F7T5I4X3.js";
 import "./chunk-RPGBVRDM.js";
 
 // src/vendor/relay-runtime-web.js
@@ -130,6 +132,26 @@ function syncHtmlHydratedAttr(live, container) {
     const root = doc.documentElement;
     if (!root || typeof root.setAttribute !== "function") return;
     root.setAttribute("data-pt-hydrated", live ? "1" : "0");
+    let phase = live ? 1 : 0;
+    try {
+      if (typeof get_client_live_phase === "function") {
+        phase = Number(get_client_live_phase()) || phase;
+      }
+    } catch (_) {
+    }
+    root.setAttribute("data-pt-live-phase", String(phase));
+  } catch (_) {
+  }
+}
+function syncHtmlLivePhaseAttr(phase, container) {
+  const doc = documentFor(container);
+  if (!doc) return;
+  try {
+    const root = doc.documentElement;
+    if (!root || typeof root.setAttribute !== "function") return;
+    const p = Math.max(0, Math.min(4, Number(phase) || 0));
+    root.setAttribute("data-pt-live-phase", String(p));
+    root.setAttribute("data-pt-hydrated", p >= 1 ? "1" : "0");
   } catch (_) {
   }
 }
@@ -1360,33 +1382,58 @@ async function renderHook(container, options = {}) {
   function scheduleDeferredLiveUpgrade() {
     if (liveUpgradeScheduled) return;
     liveUpgradeScheduled = true;
-    const run = () => {
+    const phases = [2, 3, 4];
+    let idx = 0;
+    const runNext = () => {
+      if (idx >= phases.length) return;
+      const phase = phases[idx++];
       try {
-        doRender();
-      } catch (e) {
-        console.error("[relay-runtime] deferred live upgrade failed:", e);
-      }
-    };
-    const kick = () => {
-      try {
-        if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(run, { timeout: 4e3 });
-          return;
+        if (typeof set_client_live_phase === "function") {
+          set_client_live_phase(phase);
+        } else if (typeof set_client_live === "function") {
+          set_client_live(true);
         }
       } catch (_) {
       }
-      setTimeout(run, 120);
+      syncHtmlLivePhaseAttr(phase, container);
+      try {
+        doRender();
+      } catch (e) {
+        console.error("[relay-runtime] live phase", phase, "failed:", e);
+      }
+      if (idx < phases.length) {
+        scheduleIdle(runNext, 120 + idx * 80);
+      }
     };
     try {
       if (typeof requestAnimationFrame === "function") {
         requestAnimationFrame(() => {
-          requestAnimationFrame(kick);
+          requestAnimationFrame(() => scheduleIdle(runNext, 200));
         });
         return;
       }
     } catch (_) {
     }
-    setTimeout(kick, 0);
+    scheduleIdle(runNext, 200);
+  }
+  function scheduleIdle(fn, timeoutMs) {
+    try {
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(
+          () => {
+            try {
+              fn();
+            } catch (e) {
+              console.error("[relay-runtime] idle task failed:", e);
+            }
+          },
+          { timeout: timeoutMs || 2500 }
+        );
+        return;
+      }
+    } catch (_) {
+    }
+    setTimeout(fn, Math.min(timeoutMs || 120, 500));
   }
   try {
     setBootStatus(container, { phase: "wasm", message: "Preparing runtime\u2026" });
@@ -1581,10 +1628,14 @@ async function renderHook(container, options = {}) {
             prevVnode = vnode;
             container.dataset.relayHydrated = "1";
             try {
-              if (typeof set_client_live === "function") set_client_live(true);
+              if (typeof set_client_live_phase === "function") {
+                set_client_live_phase(1);
+              } else if (typeof set_client_live === "function") {
+                set_client_live(true);
+              }
             } catch (_) {
             }
-            syncHtmlHydratedAttr(true, container);
+            syncHtmlLivePhaseAttr(1, container);
             livePromoted = true;
             enableClientOnlyChrome(container);
             setBootStatus(container, { phase: "live", message: "Ready" });
@@ -1615,10 +1666,14 @@ async function renderHook(container, options = {}) {
         delete container.dataset.relaySsr;
         if (!livePromoted) {
           try {
-            if (typeof set_client_live === "function") set_client_live(true);
+            if (typeof set_client_live_phase === "function") {
+              set_client_live_phase(1);
+            } else if (typeof set_client_live === "function") {
+              set_client_live(true);
+            }
           } catch (_) {
           }
-          syncHtmlHydratedAttr(true, container);
+          syncHtmlLivePhaseAttr(1, container);
           livePromoted = true;
           setBootStatus(container, { phase: "live", message: "Ready" });
           injectHostManifestFields(hooksManifest, container);
@@ -1641,6 +1696,7 @@ async function renderHook(container, options = {}) {
         if (livePromoted) {
           setBootStatus(container, { phase: "live", message: "Ready" });
           installRumBeacon(container, { hydrateOk: !!container.dataset?.relayHydrated });
+          scheduleDeferredLiveUpgrade();
         }
       } catch (e) {
         renderHookErrorUI(container, e, {
@@ -1943,7 +1999,8 @@ export {
   shouldInterceptRelayControlledAnchorClick,
   styleParentFor,
   syncHtmlHydratedAttr,
+  syncHtmlLivePhaseAttr,
   themeTargetFor,
   vnodeToDom
 };
-//# sourceMappingURL=relay-runtime-web-F37LAE6Z.js.map
+//# sourceMappingURL=relay-runtime-web-VMCHPOBP.js.map
