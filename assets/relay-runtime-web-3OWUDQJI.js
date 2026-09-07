@@ -1092,7 +1092,7 @@ function promoteSsrShellWithoutWipe(container, opts = {}) {
   }
   installRumBeacon(container, { hydrateOk: opts.hydrateOk !== false });
 }
-var SSR_PLACEHOLDER_SELECTORS = "[data-pt-dirnav-ssr],[data-pt-changelog-ssr],[data-pt-autoindex-ssr]";
+var SSR_PLACEHOLDER_SELECTORS = "[data-pt-dirnav-ssr],[data-pt-changelog-ssr],[data-pt-autoindex-ssr],[data-pt-deferred-ssr]";
 function cssEscapeIdent(s) {
   try {
     if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
@@ -1113,7 +1113,7 @@ function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfte
   };
   container.querySelectorAll(SSR_PLACEHOLDER_SELECTORS).forEach(add);
   ;
-  ["Directory", "Change log", "Auto index"].forEach((label) => {
+  ["Directory", "Change log", "Auto index", "Deferred section"].forEach((label) => {
     container.querySelectorAll(`[aria-label="${cssEscapeIdent(label)}"]`).forEach(add);
   });
   if (!targets.length) return false;
@@ -1133,6 +1133,8 @@ function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfte
         next = searchRoot.querySelector(".pt-changelog");
       } else if (oldEl.classList?.contains("pt-autoindex") || oldEl.hasAttribute("data-pt-autoindex-ssr")) {
         next = searchRoot.querySelector(".pt-autoindex");
+      } else if (oldEl.classList?.contains("pt-deferred-md") || oldEl.hasAttribute("data-pt-deferred-ssr")) {
+        next = searchRoot.querySelector(".pt-deferred-md");
       }
     }
     if (!next || !oldEl.parentNode) continue;
@@ -2152,4 +2154,4 @@ export {
   vnodeToDom,
   yieldForInteractive
 };
-//# sourceMappingURL=relay-runtime-web-5ISHIM2G.js.map
+//# sourceMappingURL=relay-runtime-web-3OWUDQJI.js.map
