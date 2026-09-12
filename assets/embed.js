@@ -1,7 +1,7 @@
 import {
   bootEmbedRoot
-} from "./chunk-CMM2OA62.js";
-import "./chunk-DDUEWEHT.js";
+} from "./chunk-KADJ2QRG.js";
+import "./chunk-42KCOWKW.js";
 import "./chunk-RPGBVRDM.js";
 
 // src/embed-main.ts
@@ -12,11 +12,11 @@ if (!rootEl) {
   void bootEmbedRoot(rootEl).catch(async (e) => {
     console.error("[embed] boot failed", e);
     if (rootEl.dataset?.relaySsr === "1" && rootEl.childElementCount > 0) {
-      const { renderHookErrorUI: renderHookErrorUI2 } = await import("./relay-runtime-web-UETOHNFB.js");
+      const { renderHookErrorUI: renderHookErrorUI2 } = await import("./relay-runtime-web-76BBBSRI.js");
       renderHookErrorUI2(rootEl, e, { keepContent: true, title: "Hydration error" });
       return;
     }
-    const { renderHookErrorUI } = await import("./relay-runtime-web-UETOHNFB.js");
+    const { renderHookErrorUI } = await import("./relay-runtime-web-76BBBSRI.js");
     renderHookErrorUI(rootEl, e, { keepContent: false, title: "Embed error" });
   });
 }

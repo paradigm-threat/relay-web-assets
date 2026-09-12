@@ -11,7 +11,7 @@ import {
   set_client_live,
   set_client_live_phase,
   set_theme_and_render
-} from "./chunk-DDUEWEHT.js";
+} from "./chunk-42KCOWKW.js";
 import "./chunk-RPGBVRDM.js";
 
 // src/vendor/relay-runtime-web.js
@@ -1132,7 +1132,7 @@ function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfte
   };
   container.querySelectorAll(SSR_PLACEHOLDER_SELECTORS).forEach(add);
   ;
-  ["Directory", "Change log", "Auto index", "Deferred section"].forEach((label) => {
+  ["Site directory", "Directory", "Change log", "Auto index", "Deferred section"].forEach((label) => {
     container.querySelectorAll(`[aria-label="${cssEscapeIdent(label)}"]`).forEach(add);
   });
   if (!targets.length) return false;
@@ -2173,4 +2173,4 @@ export {
   vnodeToDom,
   yieldForInteractive
 };
-//# sourceMappingURL=relay-runtime-web-UETOHNFB.js.map
+//# sourceMappingURL=relay-runtime-web-76BBBSRI.js.map
