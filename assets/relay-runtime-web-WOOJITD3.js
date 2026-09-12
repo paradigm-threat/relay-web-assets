@@ -118,6 +118,18 @@ function applyInjectedCss(container) {
   }
   syncHtmlThemeClass(themeTargetFor(container));
 }
+function applyHtmlThemeClass(root, name) {
+  if (!root || name !== "light" && name !== "dark") return;
+  try {
+    root.setAttribute("class", name);
+  } catch (_) {
+    try {
+      root.classList.remove("light", "dark");
+      root.classList.add(name);
+    } catch (_2) {
+    }
+  }
+}
 function syncHtmlThemeClass(target) {
   if (typeof document === "undefined") return;
   const root = target || document.documentElement;
@@ -128,15 +140,23 @@ function syncHtmlThemeClass(target) {
     tip = "";
   }
   if (tip === "light" || tip === "dark") {
-    try {
-      root.setAttribute("class", tip);
-    } catch (_) {
-      try {
-        root.classList.remove("light", "dark");
-        root.classList.add(tip);
-      } catch (_2) {
-      }
+    applyHtmlThemeClass(root, tip);
+    return;
+  }
+  let stored = "";
+  try {
+    if (typeof localStorage !== "undefined") {
+      stored = String(localStorage.getItem("pt-theme") || "").trim();
     }
+  } catch (_) {
+    stored = "";
+  }
+  if (stored === "light" || stored === "dark") {
+    try {
+      root.setAttribute("data-pt-theme", stored);
+    } catch (_) {
+    }
+    applyHtmlThemeClass(root, stored);
     return;
   }
   let name = "";
@@ -148,8 +168,7 @@ function syncHtmlThemeClass(target) {
     return;
   }
   if (name !== "light" && name !== "dark") return;
-  root.classList.remove("light", "dark");
-  root.classList.add(name);
+  applyHtmlThemeClass(root, name);
 }
 function syncHtmlHydratedAttr(live, container) {
   const doc = documentFor(container);
@@ -2154,4 +2173,4 @@ export {
   vnodeToDom,
   yieldForInteractive
 };
-//# sourceMappingURL=relay-runtime-web-TECRZIKU.js.map
+//# sourceMappingURL=relay-runtime-web-WOOJITD3.js.map
