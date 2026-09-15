@@ -1150,8 +1150,8 @@ function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfte
         next = searchRoot.querySelector(".pt-dir-nav");
       } else if (oldEl.classList?.contains("pt-changelog") || oldEl.hasAttribute("data-pt-changelog-ssr")) {
         next = searchRoot.querySelector(".pt-changelog");
-      } else if (oldEl.classList?.contains("pt-autoindex") || oldEl.hasAttribute("data-pt-autoindex-ssr")) {
-        next = searchRoot.querySelector(".pt-autoindex");
+      } else if (oldEl.hasAttribute("data-pt-autoindex-ssr") || oldEl.hasAttribute("data-pt-dir-index") || oldEl.classList?.contains("pt-dir-index")) {
+        next = searchRoot.querySelector('[data-pt-dir-index="1"]:not([data-pt-md-css])') || searchRoot.querySelector(".pt-dir-index[data-pt-dir-index]:not([hidden])") || searchRoot.querySelector('[aria-label="Auto index"]');
       } else if (oldEl.classList?.contains("pt-deferred-md") || oldEl.hasAttribute("data-pt-deferred-ssr")) {
         next = searchRoot.querySelector("section.pt-deferred-md") || searchRoot.querySelector("[data-pt-deferred],[data-pt-deferred-pending],[data-pt-deferred-ssr]");
       }
@@ -2173,4 +2173,4 @@ export {
   vnodeToDom,
   yieldForInteractive
 };
-//# sourceMappingURL=relay-runtime-web-76BBBSRI.js.map
+//# sourceMappingURL=relay-runtime-web-VRJNCDU6.js.map
