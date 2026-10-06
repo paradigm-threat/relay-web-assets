@@ -8,6 +8,27 @@
       "contentType": "application/wasm",
       "sha256": "51fb95e3e45edb456739a20abf8abe1a3910a1d98581db97a0213823e05a6b5a",
       "bytes": 1607836
+    },
+    {
+      "id": "wasm_relay_video_wasm_pkg_relay_video_wasm_bg.wasm",
+      "path": "wasm/relay_video_wasm_pkg/relay_video_wasm_bg.wasm",
+      "contentType": "application/wasm",
+      "sha256": "24f5821ebc819aa89c9de359605eb3e15a7a4be9f68c9ca5ef2bf6906cd5b694",
+      "bytes": 144752
+    },
+    {
+      "id": "wasm_relay_video_wasm_pkg_player_js",
+      "path": "wasm/relay_video_wasm_pkg/player.js",
+      "contentType": "text/javascript",
+      "sha256": "334e187aadd6b279c045bf82ecf6ad1ff02d9b67d060618fe33cf0a34e5f2071",
+      "bytes": 12715
+    },
+    {
+      "id": "wasm_relay_video_wasm_pkg_relay_video_wasm_js",
+      "path": "wasm/relay_video_wasm_pkg/relay_video_wasm.js",
+      "contentType": "text/javascript",
+      "sha256": "f1096a1bac730c3d5df7e74cb7a6bdabac8cebf3fa9bde99cfd9854ed42cea2d",
+      "bytes": 10551
     }
   ]
 }

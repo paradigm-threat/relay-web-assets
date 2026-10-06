@@ -1,0 +1,17 @@
+{
+  "name": "relay-video-wasm",
+  "type": "module",
+  "description": "Codec-agnostic container demux for Relay web video (Matroska first)",
+  "version": "0.1.0",
+  "license": "MIT OR Apache-2.0",
+  "files": [
+    "relay_video_wasm_bg.wasm",
+    "relay_video_wasm.js",
+    "relay_video_wasm.d.ts"
+  ],
+  "main": "relay_video_wasm.js",
+  "types": "relay_video_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

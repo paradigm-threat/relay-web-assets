@@ -1,9 +1,10 @@
 {
   "schema": "relay.web-assets.v1",
   "profile": "embed-no-react",
-  "builtAt": "2026-10-05T17:58:44Z",
+  "builtAt": "2026-10-06T12:41:31Z",
   "source": {
     "monorepoCommit": "dcb7f0824bbfcc28a027f3d05895fcaa6c3bcee9",
-    "relayRuntimeCommit": "0b080a704bd6bce782883b46148927bf53406e38"
+    "relayRuntimeCommit": "0b080a704bd6bce782883b46148927bf53406e38",
+    "note": "relay_video_wasm_pkg added"
   }
 }
