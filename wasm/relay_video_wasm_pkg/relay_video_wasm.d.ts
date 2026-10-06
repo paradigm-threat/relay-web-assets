@@ -16,6 +16,7 @@ export class DemuxSession {
     constructor(data: Uint8Array);
     /**
      * Seek using Matroska timestamp ticks (same unit as Frame.timestamp).
+     * Retries earlier cue points when a seek lands in a hole (no frames).
      */
     seek_ticks(ticks: bigint): void;
     /**

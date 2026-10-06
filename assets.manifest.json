@@ -13,22 +13,29 @@
       "id": "wasm_relay_video_wasm_pkg_relay_video_wasm_bg.wasm",
       "path": "wasm/relay_video_wasm_pkg/relay_video_wasm_bg.wasm",
       "contentType": "application/wasm",
-      "sha256": "24f5821ebc819aa89c9de359605eb3e15a7a4be9f68c9ca5ef2bf6906cd5b694",
-      "bytes": 144752
+      "sha256": "73b871a884b36f8426513f2f9becaa72836d9488bffe6abc5b84ba25291c12ce",
+      "bytes": 146216
     },
     {
       "id": "wasm_relay_video_wasm_pkg_player_js",
       "path": "wasm/relay_video_wasm_pkg/player.js",
       "contentType": "text/javascript",
-      "sha256": "334e187aadd6b279c045bf82ecf6ad1ff02d9b67d060618fe33cf0a34e5f2071",
-      "bytes": 12715
+      "sha256": "74a8d7ef515f430c70594be37feb668eb69d547ee22e9cacde0c9ea59b48487a",
+      "bytes": 14222
     },
     {
       "id": "wasm_relay_video_wasm_pkg_relay_video_wasm_js",
       "path": "wasm/relay_video_wasm_pkg/relay_video_wasm.js",
       "contentType": "text/javascript",
-      "sha256": "f1096a1bac730c3d5df7e74cb7a6bdabac8cebf3fa9bde99cfd9854ed42cea2d",
-      "bytes": 10551
+      "sha256": "3775b8d9a37afa33c33318093e2ed439d39a21364778d0780330af360695af1d",
+      "bytes": 10626
+    },
+    {
+      "id": "wasm_relay_video_wasm_pkg_playback_support_js",
+      "path": "wasm/relay_video_wasm_pkg/playback-support.js",
+      "contentType": "text/javascript",
+      "sha256": "f6c3683f4883a5cc9d09edb659d535a02b534c5eae448a8620b479fbdaa4ad52",
+      "bytes": 8761
     }
   ]
 }

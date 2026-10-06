@@ -8,11 +8,45 @@ import init, {
   container_hint_from_url,
 } from './relay_video_wasm.js';
 
+import {
+  MAX_IN_MEMORY_DEMUX_BYTES,
+  PlaybackErrorCode,
+  makePlaybackError,
+  spokenMessageForError,
+  containerHintFromUrl,
+  nativeLikelySupports as nativeLikelySupportsPure,
+  b64ToBytes,
+  videoDecoderConfig,
+  audioDecoderConfig,
+  probeWebCodecsSupport,
+  formatBytesSpoken,
+} from './playback-support.js';
+
+export {
+  MAX_IN_MEMORY_DEMUX_BYTES,
+  PlaybackErrorCode,
+  makePlaybackError,
+  spokenMessageForError,
+  containerHintFromUrl,
+  videoDecoderConfig,
+  audioDecoderConfig,
+  probeWebCodecsSupport,
+  formatBytesSpoken,
+};
+
 let wasmReady = null;
 
 export function ensureWasm(wasmUrl) {
   if (!wasmReady) {
-    wasmReady = init(wasmUrl ? { module_or_path: wasmUrl } : undefined);
+    wasmReady = Promise.resolve()
+      .then(() => init(wasmUrl ? { module_or_path: wasmUrl } : undefined))
+      .catch((e) => {
+        wasmReady = null;
+        throw makePlaybackError(
+          PlaybackErrorCode.WASM_LOAD_FAILED,
+          e && e.message ? e.message : String(e),
+        );
+      });
   }
   return wasmReady;
 }
@@ -21,178 +55,138 @@ export function containerHint(url) {
   try {
     return container_hint_from_url(url || '');
   } catch (_) {
-    return 'unknown';
+    return containerHintFromUrl(url);
   }
 }
 
 /** True when progressive HTML5 is likely to work without WASM demux. */
 export function nativeLikelySupports(url, videoEl) {
-  const hint = containerHint(url);
-  if (hint === 'matroska') return false;
-  const v = videoEl || (typeof document !== 'undefined' ? document.createElement('video') : null);
-  if (!v || !v.canPlayType) return hint === 'mp4' || hint === 'webm';
-  if (hint === 'mp4') {
-    const r = v.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
-    return r === 'probably' || r === 'maybe';
-  }
-  if (hint === 'webm') {
-    const r = v.canPlayType('video/webm; codecs="vp8, vorbis"');
-    return r === 'probably' || r === 'maybe';
-  }
-  return false;
+  return nativeLikelySupportsPure(url, videoEl);
 }
 
-function b64ToBytes(b64) {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-/** Map Matroska CodecID + private to WebCodecs VideoDecoderConfig. */
-export function videoDecoderConfig(track) {
-  if (!track) return null;
-  const id = String(track.codec_id || '');
-  const desc = track.codec_private_b64 ? b64ToBytes(track.codec_private_b64) : undefined;
-  let codec = null;
-  if (id.includes('AVC') || id.includes('avc')) {
-    // Prefer avcC description; codec string baseline when unknown
-    codec = 'avc1.42E01E';
-    if (desc && desc.length > 3) {
-      // avcC: profile at [1]
-      const profile = desc[1];
-      const compat = desc[2];
-      const level = desc[3];
-      codec =
-        'avc1.' +
-        [profile, compat, level]
-          .map((x) => x.toString(16).padStart(2, '0').toUpperCase())
-          .join('');
-    }
-  } else if (id.includes('HEVC') || id.includes('HVC') || id.includes('hvc')) {
-    codec = 'hvc1.1.6.L93.B0';
-  } else if (id.includes('VP9')) {
-    codec = 'vp09.00.10.08';
-  } else if (id.includes('VP8')) {
-    codec = 'vp8';
-  } else {
-    return null;
-  }
-  const cfg = {
-    codec,
-    codedWidth: track.width || 640,
-    codedHeight: track.height || 360,
-    // Do not force prefer-hardware: Linux Chrome often reports supported then fails decode.
-  };
-  if (desc && desc.byteLength) cfg.description = desc;
-  return cfg;
-}
-
-export function audioDecoderConfig(track) {
-  if (!track) return null;
-  const id = String(track.codec_id || '');
-  if (id.includes('AAC') || id.includes('MP4A')) {
-    return {
-      codec: 'mp4a.40.2',
-      sampleRate: Math.round(track.sample_rate || 48000),
-      numberOfChannels: track.channels || 2,
-      description: track.codec_private_b64 ? b64ToBytes(track.codec_private_b64) : undefined,
-    };
-  }
-  if (id.includes('OPUS')) {
-    return {
-      codec: 'opus',
-      sampleRate: Math.round(track.sample_rate || 48000),
-      numberOfChannels: track.channels || 2,
-    };
-  }
-  return null;
-}
-
-/**
- * Probe WebCodecs support for tracks in meta JSON.
- * @returns {{ ok: boolean, reason?: string, video?: object, audio?: object }}
- */
-export async function probeWebCodecsSupport(meta) {
-  if (typeof VideoDecoder === 'undefined') {
-    return { ok: false, reason: 'WebCodecs VideoDecoder missing' };
-  }
-  const tracks = (meta && meta.tracks) || [];
-  const vTrack = tracks.find((t) => t.kind === 'video');
-  const aTrack = tracks.find((t) => t.kind === 'audio');
-  const vCfg = videoDecoderConfig(vTrack);
-  if (!vCfg) return { ok: false, reason: 'unsupported video codec id' };
-  try {
-    const vs = await VideoDecoder.isConfigSupported(vCfg);
-    if (!vs || !vs.supported) {
-      return { ok: false, reason: 'VideoDecoder rejects ' + vCfg.codec, video: vCfg };
-    }
-  } catch (e) {
-    return { ok: false, reason: String(e && e.message ? e.message : e), video: vCfg };
-  }
-  let aCfg = null;
-  if (aTrack && typeof AudioDecoder !== 'undefined') {
-    aCfg = audioDecoderConfig(aTrack);
-    if (aCfg) {
-      try {
-        const as_ = await AudioDecoder.isConfigSupported(aCfg);
-        if (!as_ || !as_.supported) aCfg = null;
-      } catch (_) {
-        aCfg = null;
-      }
-    }
-  }
-  return { ok: true, video: vCfg, audio: aCfg };
-}
+const MAX_DECODE_QUEUE = 8;
+const DECODE_FAIL_THRESHOLD = 12;
 
 /**
  * Mount WASM demux + WebCodecs player into container.
- * @returns {{ destroy, play, pause, seek, getCurrentTime, getDuration, engine: 'wasm' }}
+ * @returns {Promise<{ destroy, play, pause, seek, getCurrentTime, getDuration, engine: 'wasm', lastError }>}
  */
-/** v1 demux loads an assembled buffer; refuse multi‑GB masters until Range open lands. */
-const MAX_IN_MEMORY_DEMUX_BYTES = 96 * 1024 * 1024;
-
 export async function createWasmPlayer(container, src, options = {}) {
   const opts = options || {};
-  await ensureWasm(opts.wasmUrl);
+  const onError = typeof opts.onError === 'function' ? opts.onError : null;
+  const onTimeUpdate = typeof opts.onTimeUpdate === 'function' ? opts.onTimeUpdate : null;
+  const onPlay = typeof opts.onPlay === 'function' ? opts.onPlay : null;
+  const onPause = typeof opts.onPause === 'function' ? opts.onPause : null;
+  const onEnded = typeof opts.onEnded === 'function' ? opts.onEnded : null;
+  const onUnderrun = typeof opts.onUnderrun === 'function' ? opts.onUnderrun : null;
+  const onStatus = typeof opts.onStatus === 'function' ? opts.onStatus : null;
+
+  function status(msg) {
+    if (onStatus) onStatus(msg);
+  }
+
+  function fail(code, detail, extra) {
+    const err = makePlaybackError(code, detail, extra);
+    if (onError) onError(err);
+    return err;
+  }
+
+  status('Loading extended video engine…');
+  try {
+    await ensureWasm(opts.wasmUrl);
+  } catch (e) {
+    throw e.code ? e : makePlaybackError(PlaybackErrorCode.WASM_LOAD_FAILED, String(e));
+  }
+
+  let contentLen = 0;
   try {
     const head = await fetch(src, { method: 'HEAD' });
     if (head.ok) {
-      const len = Number(head.headers.get('content-length') || 0);
-      if (len > MAX_IN_MEMORY_DEMUX_BYTES) {
-        const err = new Error('source too large for in-memory demux; use compatibility MP4');
-        err.code = 'SOURCE_TOO_LARGE';
-        throw err;
+      contentLen = Number(head.headers.get('content-length') || 0);
+      if (contentLen > MAX_IN_MEMORY_DEMUX_BYTES) {
+        throw makePlaybackError(
+          PlaybackErrorCode.SOURCE_TOO_LARGE,
+          formatBytesSpoken(contentLen),
+        );
       }
     }
   } catch (e) {
-    if (e && e.code === 'SOURCE_TOO_LARGE') throw e;
+    if (e && e.code === PlaybackErrorCode.SOURCE_TOO_LARGE) throw e;
+    // HEAD often blocked on IPFS gateways — continue with GET.
   }
-  // Prefer Range so mirrors that only answer 206 still work; fall back to full GET.
-  let res = await fetch(src, { headers: { Range: 'bytes=0-' } });
-  if (res.status === 416 || (res.status >= 400 && res.status !== 206)) {
-    res = await fetch(src);
+
+  status(
+    contentLen
+      ? 'Downloading ' + formatBytesSpoken(contentLen) + ' for demux…'
+      : 'Downloading video for demux…',
+  );
+
+  let res;
+  try {
+    res = await fetch(src, { headers: { Range: 'bytes=0-' } });
+    if (res.status === 416 || (res.status >= 400 && res.status !== 206)) {
+      res = await fetch(src);
+    }
+  } catch (e) {
+    throw makePlaybackError(
+      PlaybackErrorCode.FETCH_FAILED,
+      e && e.message ? e.message : 'network error',
+    );
   }
-  if (!res.ok && res.status !== 206) throw new Error('fetch failed ' + res.status);
-  const buf = new Uint8Array(await res.arrayBuffer());
+  if (!res.ok && res.status !== 206) {
+    throw makePlaybackError(PlaybackErrorCode.FETCH_FAILED, 'HTTP ' + res.status);
+  }
+
+  let buf;
+  try {
+    buf = new Uint8Array(await res.arrayBuffer());
+  } catch (e) {
+    throw makePlaybackError(
+      PlaybackErrorCode.FETCH_FAILED,
+      e && e.message ? e.message : 'read failed',
+    );
+  }
   if (buf.byteLength > MAX_IN_MEMORY_DEMUX_BYTES) {
-    const err = new Error('source too large for in-memory demux; use compatibility MP4');
-    err.code = 'SOURCE_TOO_LARGE';
-    throw err;
+    throw makePlaybackError(
+      PlaybackErrorCode.SOURCE_TOO_LARGE,
+      formatBytesSpoken(buf.byteLength),
+    );
   }
-  const session = new DemuxSession(buf);
-  const meta = JSON.parse(session.meta_json());
+  if (buf.byteLength < 64) {
+    throw makePlaybackError(PlaybackErrorCode.FETCH_FAILED, 'empty or stub response');
+  }
+
+  status('Opening container…');
+  let session;
+  let meta;
+  try {
+    session = new DemuxSession(buf);
+    meta = JSON.parse(session.meta_json());
+  } catch (e) {
+    throw makePlaybackError(
+      PlaybackErrorCode.DEMUX_FAILED,
+      e && e.message ? e.message : String(e),
+    );
+  }
+
   const probe = await probeWebCodecsSupport(meta);
   if (!probe.ok) {
-    session.free && session.free();
-    const err = new Error(probe.reason || 'WebCodecs unsupported');
-    err.code = 'WEBCODECS_UNSUPPORTED';
-    err.probe = probe;
-    throw err;
+    try {
+      if (session.free) session.free();
+    } catch (_) {}
+    throw makePlaybackError(
+      probe.code || PlaybackErrorCode.WEBCODECS_UNSUPPORTED,
+      probe.reason,
+      { probe },
+    );
   }
+
+  status('Starting decoder (' + (probe.video.codec || 'video') + ')…');
 
   const canvas = document.createElement('canvas');
   canvas.className = 'relay-video-player relay-video-player-canvas';
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', 'Video playback');
   canvas.width = probe.video.codedWidth || 640;
   canvas.height = probe.video.codedHeight || 360;
   canvas.style.width = '100%';
@@ -200,25 +194,27 @@ export async function createWasmPlayer(container, src, options = {}) {
   canvas.style.objectFit = 'contain';
   canvas.style.background = '#000';
   container.appendChild(canvas);
-  const ctx = canvas.getContext('2d');
+  const ctx2d = canvas.getContext('2d');
 
   let audioCtx = null;
   let playing = false;
   let destroyed = false;
+  let pumpRunning = false;
   let currentTimeUs = 0;
   const durationUs = meta.duration_ns ? meta.duration_ns / 1000 : 0;
-  let underrunFrames = 0;
-  const onError = typeof opts.onError === 'function' ? opts.onError : null;
-  const onTimeUpdate = typeof opts.onTimeUpdate === 'function' ? opts.onTimeUpdate : null;
-  const onPlay = typeof opts.onPlay === 'function' ? opts.onPlay : null;
-  const onPause = typeof opts.onPause === 'function' ? opts.onPause : null;
-  const onEnded = typeof opts.onEnded === 'function' ? opts.onEnded : null;
-  const onUnderrun = typeof opts.onUnderrun === 'function' ? opts.onUnderrun : null;
+  let decodeFails = 0;
+  let needKeyframe = true;
+  let lastError = null;
+  let playEpoch = 0;
 
   const videoDec = new VideoDecoder({
     output: (frame) => {
       try {
-        ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+        if (destroyed) {
+          frame.close();
+          return;
+        }
+        ctx2d.drawImage(frame, 0, 0, canvas.width, canvas.height);
         currentTimeUs = frame.timestamp;
         if (onTimeUpdate) onTimeUpdate(currentTimeUs / 1e6, durationUs / 1e6);
       } finally {
@@ -226,100 +222,168 @@ export async function createWasmPlayer(container, src, options = {}) {
       }
     },
     error: (e) => {
-      if (onError) onError(e);
+      lastError = makePlaybackError(
+        PlaybackErrorCode.DECODE_FAILED,
+        e && e.message ? e.message : String(e),
+      );
+      playing = false;
+      fail(PlaybackErrorCode.DECODE_FAILED, lastError.message);
     },
   });
-  videoDec.configure(probe.video);
+  try {
+    videoDec.configure(probe.video);
+  } catch (e) {
+    try {
+      canvas.remove();
+    } catch (_) {}
+    try {
+      if (session.free) session.free();
+    } catch (_) {}
+    throw makePlaybackError(
+      PlaybackErrorCode.WEBCODECS_UNSUPPORTED,
+      e && e.message ? e.message : 'configure failed',
+      { video: probe.video },
+    );
+  }
 
   let audioDec = null;
+  let audioStartMediaUs = null;
+  let audioStartCtxTime = null;
   if (probe.audio) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    audioDec = new AudioDecoder({
-      output: (audioData) => {
-        try {
-          if (!audioCtx) return;
-          const ch = audioData.numberOfChannels;
-          const frames = audioData.numberOfFrames;
-          const rate = audioData.sampleRate;
-          const buffer = audioCtx.createBuffer(ch, frames, rate);
-          for (let c = 0; c < ch; c++) {
-            const plane = new Float32Array(frames);
-            audioData.copyTo(plane, { planeIndex: c });
-            buffer.copyToChannel(plane, c);
-          }
-          const srcNode = audioCtx.createBufferSource();
-          srcNode.buffer = buffer;
-          srcNode.connect(audioCtx.destination);
-          const when = audioCtx.currentTime + 0.05;
-          srcNode.start(when);
-        } finally {
-          audioData.close();
-        }
-      },
-      error: () => {},
-    });
     try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioDec = new AudioDecoder({
+        output: (audioData) => {
+          try {
+            if (!audioCtx || destroyed) return;
+            const ch = audioData.numberOfChannels;
+            const frames = audioData.numberOfFrames;
+            const rate = audioData.sampleRate;
+            const buffer = audioCtx.createBuffer(ch, frames, rate);
+            for (let c = 0; c < ch; c++) {
+              const plane = new Float32Array(frames);
+              audioData.copyTo(plane, { planeIndex: c });
+              buffer.copyToChannel(plane, c);
+            }
+            const srcNode = audioCtx.createBufferSource();
+            srcNode.buffer = buffer;
+            srcNode.connect(audioCtx.destination);
+            const ts = audioData.timestamp;
+            if (audioStartMediaUs == null) {
+              audioStartMediaUs = ts;
+              audioStartCtxTime = audioCtx.currentTime + 0.04;
+            }
+            const when =
+              audioStartCtxTime + Math.max(0, (ts - audioStartMediaUs) / 1e6);
+            srcNode.start(Math.max(when, audioCtx.currentTime));
+          } finally {
+            audioData.close();
+          }
+        },
+        error: () => {
+          // Audio is best-effort; keep video.
+          try {
+            if (audioDec) audioDec.close();
+          } catch (_) {}
+          audioDec = null;
+        },
+      });
       audioDec.configure(probe.audio);
     } catch (_) {
       audioDec = null;
     }
   }
 
-  async function pump() {
-    while (playing && !destroyed) {
-      let raw;
-      try {
-        raw = session.next_packet_json();
-      } catch (e) {
-        if (onError) onError(e);
-        playing = false;
-        break;
-      }
-      if (raw == null) {
-        playing = false;
-        if (onEnded) onEnded();
-        break;
-      }
-      let pkt;
-      try {
-        pkt = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(String(raw));
-      } catch (_) {
-        continue;
-      }
-      const data = b64ToBytes(pkt.data_b64);
-      if (pkt.kind === 'video' && videoDec.state !== 'closed') {
+  async function waitForDecodeBudget() {
+    while (
+      !destroyed &&
+      playing &&
+      videoDec.state === 'configured' &&
+      videoDec.decodeQueueSize >= MAX_DECODE_QUEUE
+    ) {
+      await new Promise((r) => setTimeout(r, 4));
+    }
+  }
+
+  async function pump(epoch) {
+    if (pumpRunning) return;
+    pumpRunning = true;
+    try {
+      while (playing && !destroyed && epoch === playEpoch) {
+        let raw;
         try {
-          videoDec.decode(
-            new EncodedVideoChunk({
-              type: pkt.keyframe ? 'key' : 'delta',
-              timestamp: pkt.timestamp_us,
-              duration: pkt.duration_us || undefined,
-              data,
-            }),
-          );
-          underrunFrames = 0;
+          raw = session.next_packet_json();
         } catch (e) {
-          underrunFrames += 1;
-          if (underrunFrames > 30 && onUnderrun) {
-            onUnderrun(e);
-            playing = false;
-            break;
-          }
-        }
-      } else if (pkt.kind === 'audio' && audioDec && audioDec.state !== 'closed') {
-        try {
-          audioDec.decode(
-            new EncodedAudioChunk({
-              type: pkt.keyframe ? 'key' : 'delta',
-              timestamp: pkt.timestamp_us,
-              duration: pkt.duration_us || undefined,
-              data,
-            }),
+          lastError = makePlaybackError(
+            PlaybackErrorCode.DEMUX_FAILED,
+            e && e.message ? e.message : String(e),
           );
-        } catch (_) {}
+          playing = false;
+          fail(PlaybackErrorCode.DEMUX_FAILED, lastError.message);
+          break;
+        }
+        if (raw == null) {
+          playing = false;
+          try {
+            await videoDec.flush();
+          } catch (_) {}
+          if (onEnded) onEnded();
+          break;
+        }
+        let pkt;
+        try {
+          pkt = typeof raw === 'string' ? JSON.parse(raw) : JSON.parse(String(raw));
+        } catch (_) {
+          continue;
+        }
+        const data = b64ToBytes(pkt.data_b64);
+        if (pkt.kind === 'video' && videoDec.state !== 'closed') {
+          if (needKeyframe && !pkt.keyframe) {
+            continue;
+          }
+          if (needKeyframe && pkt.keyframe) needKeyframe = false;
+          await waitForDecodeBudget();
+          if (!playing || destroyed || epoch !== playEpoch) break;
+          try {
+            videoDec.decode(
+              new EncodedVideoChunk({
+                type: pkt.keyframe ? 'key' : 'delta',
+                timestamp: pkt.timestamp_us,
+                duration: pkt.duration_us || undefined,
+                data,
+              }),
+            );
+            decodeFails = 0;
+          } catch (e) {
+            decodeFails += 1;
+            if (decodeFails >= DECODE_FAIL_THRESHOLD) {
+              lastError = makePlaybackError(
+                PlaybackErrorCode.UNDERRUN,
+                e && e.message ? e.message : 'decode queue',
+              );
+              playing = false;
+              if (onUnderrun) onUnderrun(lastError);
+              else fail(PlaybackErrorCode.UNDERRUN, lastError.message);
+              break;
+            }
+          }
+        } else if (pkt.kind === 'audio' && audioDec && audioDec.state !== 'closed') {
+          try {
+            audioDec.decode(
+              new EncodedAudioChunk({
+                type: 'key',
+                timestamp: pkt.timestamp_us,
+                duration: pkt.duration_us || undefined,
+                data,
+              }),
+            );
+          } catch (_) {}
+        }
+        // Pace ~realtime for short clips; yield every packet.
+        await new Promise((r) => setTimeout(r, 0));
       }
-      // Yield to renderer
-      await new Promise((r) => setTimeout(r, 0));
+    } finally {
+      pumpRunning = false;
     }
   }
 
@@ -327,25 +391,47 @@ export async function createWasmPlayer(container, src, options = {}) {
     engine: 'wasm',
     meta,
     canvas,
+    get lastError() {
+      return lastError;
+    },
     async play() {
       if (destroyed) return;
       playing = true;
-      if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+      playEpoch += 1;
+      const epoch = playEpoch;
+      if (audioCtx && audioCtx.state === 'suspended') {
+        try {
+          await audioCtx.resume();
+        } catch (_) {}
+      }
+      audioStartMediaUs = null;
+      audioStartCtxTime = null;
+      status('');
       if (onPlay) onPlay();
-      pump();
+      pump(epoch);
     },
     pause() {
       playing = false;
       if (onPause) onPause();
     },
     seek(seconds) {
-      const us = Math.max(0, Math.floor(seconds * 1e6));
+      const us = Math.max(0, Math.floor(Number(seconds) * 1e6));
       try {
-        // wasm-bindgen u64 expects BigInt in modern bindings
         session.seek_us(typeof BigInt === 'function' ? BigInt(us) : us);
         currentTimeUs = us;
+        needKeyframe = true;
+        audioStartMediaUs = null;
+        audioStartCtxTime = null;
+        try {
+          videoDec.reset();
+          videoDec.configure(probe.video);
+        } catch (_) {}
       } catch (e) {
-        if (onError) onError(e);
+        lastError = makePlaybackError(
+          PlaybackErrorCode.SEEK_FAILED,
+          e && e.message ? e.message : String(e),
+        );
+        if (onError) onError(lastError);
       }
     },
     getCurrentTime() {
@@ -357,6 +443,7 @@ export async function createWasmPlayer(container, src, options = {}) {
     destroy() {
       destroyed = true;
       playing = false;
+      playEpoch += 1;
       try {
         videoDec.close();
       } catch (_) {}
@@ -375,7 +462,7 @@ export async function createWasmPlayer(container, src, options = {}) {
     },
   };
 
-  if (opts.autoPlay) api.play();
+  if (opts.autoPlay) await api.play();
   return api;
 }
 

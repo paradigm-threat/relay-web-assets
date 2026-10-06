@@ -69,6 +69,7 @@ export class DemuxSession {
     }
     /**
      * Seek using Matroska timestamp ticks (same unit as Frame.timestamp).
+     * Retries earlier cue points when a seek lands in a hole (no frames).
      * @param {bigint} ticks
      */
     seek_ticks(ticks) {
