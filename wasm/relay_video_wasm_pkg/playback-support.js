@@ -25,7 +25,7 @@ const SPOKEN = Object.freeze({
   FETCH_FAILED:
     'The video file could not be downloaded from this mirror. Trying another source.',
   SOURCE_TOO_LARGE:
-    'Full-quality playback needs a streaming demuxer for this large file. Switching to 1080p for compatibility.',
+    'This archival file is too large for in-browser demux right now. Download the MKV below, or wait for a 1080p web rendition.',
   DEMUX_FAILED:
     'This file’s container could not be read. Switching to a compatibility stream.',
   NO_VIDEO_TRACK:
