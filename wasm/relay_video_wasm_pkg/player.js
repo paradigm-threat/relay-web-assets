@@ -20,6 +20,8 @@ import {
   audioDecoderConfig,
   probeWebCodecsSupport,
   formatBytesSpoken,
+  parseTotalSizeFromHeaders,
+  probeSourceByteLength,
 } from './playback-support.js';
 
 export {
@@ -32,6 +34,8 @@ export {
   audioDecoderConfig,
   probeWebCodecsSupport,
   formatBytesSpoken,
+  parseTotalSizeFromHeaders,
+  probeSourceByteLength,
 };
 
 let wasmReady = null;
@@ -100,19 +104,16 @@ export async function createWasmPlayer(container, src, options = {}) {
 
   let contentLen = 0;
   try {
-    const head = await fetch(src, { method: 'HEAD' });
-    if (head.ok) {
-      contentLen = Number(head.headers.get('content-length') || 0);
-      if (contentLen > MAX_IN_MEMORY_DEMUX_BYTES) {
-        throw makePlaybackError(
-          PlaybackErrorCode.SOURCE_TOO_LARGE,
-          formatBytesSpoken(contentLen),
-        );
-      }
+    contentLen = await probeSourceByteLength(src);
+    if (contentLen > MAX_IN_MEMORY_DEMUX_BYTES) {
+      throw makePlaybackError(
+        PlaybackErrorCode.SOURCE_TOO_LARGE,
+        formatBytesSpoken(contentLen),
+      );
     }
   } catch (e) {
     if (e && e.code === PlaybackErrorCode.SOURCE_TOO_LARGE) throw e;
-    // HEAD often blocked on IPFS gateways — continue with GET.
+    // Probe failed — continue; post-download size check still applies.
   }
 
   status(

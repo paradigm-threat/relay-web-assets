@@ -248,3 +248,42 @@ export function formatBytesSpoken(n) {
   if (x < 1024 * 1024 * 1024) return (x / (1024 * 1024)).toFixed(1) + ' MB';
   return (x / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
+
+/** Content-Range total or Content-Length. */
+export function parseTotalSizeFromHeaders(headers) {
+  if (!headers || typeof headers.get !== 'function') return 0;
+  const cr = String(headers.get('content-range') || headers.get('Content-Range') || '');
+  const m = /\/(\d+)\s*$/.exec(cr);
+  if (m) return Number(m[1]) || 0;
+  return Number(headers.get('content-length') || headers.get('Content-Length') || 0) || 0;
+}
+
+/**
+ * Resolve byte length without downloading the body.
+ * Prefer Range bytes=0-0 — HEAD often hangs on Relay/IPFS gateways.
+ */
+export async function probeSourceByteLength(src, fetchImpl) {
+  const fetchFn = fetchImpl || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+  if (!fetchFn || !src) return 0;
+  try {
+    const r = await fetchFn(src, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-0' },
+      cache: 'no-store',
+    });
+    if (r && (r.ok || r.status === 206)) {
+      const n = parseTotalSizeFromHeaders(r.headers);
+      try {
+        if (r.body && typeof r.body.cancel === 'function') r.body.cancel();
+      } catch (_) {}
+      if (n > 0) return n;
+    }
+  } catch (_) {}
+  try {
+    const head = await fetchFn(src, { method: 'HEAD', cache: 'no-store' });
+    if (head && head.ok) {
+      return Number(head.headers.get('content-length') || 0) || 0;
+    }
+  } catch (_) {}
+  return 0;
+}
