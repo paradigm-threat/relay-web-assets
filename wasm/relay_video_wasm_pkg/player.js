@@ -6,7 +6,7 @@
 import init, {
   DemuxSession,
   container_hint_from_url,
-} from './relay_video_wasm.js';
+} from '../pkg/relay_video_wasm.js';
 
 import {
   MAX_IN_MEMORY_DEMUX_BYTES,
