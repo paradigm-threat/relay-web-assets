@@ -676,16 +676,8 @@ async function preloadImportClosure(moduleMap, fetchSource, onLoaded) {
       for (const spec of localImportSpecs(src)) {
         const rel = resolveImportRel(path, spec);
         if (!rel || moduleMapHas(moduleMap, rel) || queued.has(rel)) continue;
-        const underNative = rel.indexOf("/native/") >= 0 || rel.indexOf("native/") === 0;
-        const candidates = underNative ? platformModuleCandidates(rel, detectRelayHostPlatform()).filter((c) => {
-          return c.indexOf(".web.") < 0 && c.indexOf(".host.") < 0;
-        }) : [rel];
-        for (let ci = 0; ci < candidates.length; ci = ci + 1) {
-          const cand = candidates[ci];
-          if (!cand || moduleMapHas(moduleMap, cand) || queued.has(cand)) continue;
-          queued.add(cand);
-          toFetch.push(cand);
-        }
+        queued.add(rel);
+        toFetch.push(rel);
       }
     }
     if (toFetch.length === 0) break;
@@ -1119,7 +1111,7 @@ function promoteSsrShellWithoutWipe(container, opts = {}) {
   }
   installRumBeacon(container, { hydrateOk: opts.hydrateOk !== false });
 }
-var SSR_PLACEHOLDER_SELECTORS = "[data-pt-dirnav-ssr],[data-pt-changelog-ssr],[data-pt-autoindex-ssr],[data-pt-deferred-ssr]";
+var SSR_PLACEHOLDER_SELECTORS = "[data-pt-dirnav-ssr],[data-pt-changelog-ssr],[data-pt-flashback-ssr],[data-pt-autoindex-ssr],[data-pt-deferred-ssr]";
 function cssEscapeIdent(s) {
   try {
     if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
@@ -1140,7 +1132,7 @@ function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfte
   };
   container.querySelectorAll(SSR_PLACEHOLDER_SELECTORS).forEach(add);
   ;
-  ["Site directory", "Directory", "Change log", "Auto index", "Deferred section"].forEach((label) => {
+  ["Site directory", "Directory", "Change log", "Flashback now showing", "Auto index", "Deferred section"].forEach((label) => {
     container.querySelectorAll(`[aria-label="${cssEscapeIdent(label)}"]`).forEach(add);
   });
   if (!targets.length) return false;
@@ -1158,6 +1150,8 @@ function replaceSsrPlaceholdersFromVnode(container, vnode, invokeHandler, onAfte
         next = searchRoot.querySelector(".pt-dir-nav");
       } else if (oldEl.classList?.contains("pt-changelog") || oldEl.hasAttribute("data-pt-changelog-ssr")) {
         next = searchRoot.querySelector(".pt-changelog");
+      } else if (oldEl.classList?.contains("pt-flashback-now") || oldEl.hasAttribute("data-pt-flashback-ssr")) {
+        next = searchRoot.querySelector(".pt-flashback-now");
       } else if (oldEl.hasAttribute("data-pt-autoindex-ssr") || oldEl.hasAttribute("data-pt-dir-index") || oldEl.classList?.contains("pt-dir-index")) {
         next = searchRoot.querySelector('[data-pt-dir-index="1"]:not([data-pt-md-css])') || searchRoot.querySelector(".pt-dir-index[data-pt-dir-index]:not([hidden])") || searchRoot.querySelector('[aria-label="Auto index"]');
       } else if (oldEl.classList?.contains("pt-deferred-md") || oldEl.hasAttribute("data-pt-deferred-ssr")) {
@@ -1272,72 +1266,6 @@ function applyVnodePatches(container, prevRoot, patches, invokeHandler, onAfterI
   }
   return true;
 }
-var PARK_NATIVE_BUILDERS = /* @__PURE__ */ new Map();
-function registerParkNative(tag, buildFn) {
-  const t = String(tag || "").trim();
-  if (!t || typeof buildFn !== "function") return;
-  PARK_NATIVE_BUILDERS.set(t, buildFn);
-}
-function getParkNativeBuilder(tag) {
-  return PARK_NATIVE_BUILDERS.get(String(tag || "").trim()) || null;
-}
-function listParkNativeTags() {
-  return Array.from(PARK_NATIVE_BUILDERS.keys());
-}
-try {
-  if (typeof globalThis !== "undefined") {
-    globalThis.__relayRegisterParkNative = registerParkNative;
-    globalThis.__relayGetParkNativeBuilder = getParkNativeBuilder;
-  }
-} catch (_) {
-}
-function platformModuleCandidates(pathKey, platform) {
-  const raw = String(pathKey || "").replace(/^\/+/, "");
-  if (!raw) return [];
-  const plat = String(platform || detectRelayHostPlatform()).trim() || "web";
-  const out = [];
-  const m = raw.match(/^(.*)\.(jsx|js|yaml|yml)$/i);
-  if (m) {
-    const base = m[1];
-    const ext = m[2];
-    if (!/\.(web|android|ios|native)$/i.test(base)) {
-      out.push(`${base}.${plat}.${ext}`);
-    }
-  }
-  out.push(raw);
-  return out;
-}
-function detectRelayHostPlatform() {
-  try {
-    if (typeof globalThis !== "undefined" && globalThis.__relayHostPlatform) {
-      return String(globalThis.__relayHostPlatform);
-    }
-  } catch (_) {
-  }
-  return "web";
-}
-function parkNativeTagFromProps(props) {
-  if (!props) return "";
-  const a = propStringFromVnodeProps(props, "data-relay-park-native");
-  if (a) return a;
-  const b = propStringFromVnodeProps(props, "dataRelayParkNative");
-  if (b) return b;
-  return "";
-}
-function tryBuildParkNative(tag, props, invokeHandler, onAfterInvoke) {
-  let builder = getParkNativeBuilder(tag);
-  if (!builder) {
-    const viaProp = parkNativeTagFromProps(props);
-    if (viaProp) builder = getParkNativeBuilder(viaProp);
-  }
-  if (!builder) return null;
-  try {
-    return builder(props || {}, invokeHandler, onAfterInvoke);
-  } catch (err) {
-    console.error("[relay-runtime] park native build failed:", tag, err);
-    return null;
-  }
-}
 function vnodeToDom(v, invokeHandler = invoke_handler, onAfterInvoke = null) {
   if (!v) return null;
   if (v.Empty !== void 0) return null;
@@ -1363,8 +1291,6 @@ function vnodeToDom(v, invokeHandler = invoke_handler, onAfterInvoke = null) {
     if (tag === "relay-audio-player") {
       return buildRelayAudioPlayer(props || {}, invokeHandler, onAfterInvoke);
     }
-    const parkEl = tryBuildParkNative(tag, props || {}, invokeHandler, onAfterInvoke);
-    if (parkEl) return parkEl;
     if (tag === "fragment") {
       const frag = document.createDocumentFragment();
       for (const c of children || []) {
@@ -1386,8 +1312,6 @@ function vnodeToDom(v, invokeHandler = invoke_handler, onAfterInvoke = null) {
     if (rawTag === "relay-audio-player") {
       return buildRelayAudioPlayer(v.props || {}, invokeHandler, onAfterInvoke);
     }
-    const parkEl2 = tryBuildParkNative(rawTag, v.props || {}, invokeHandler, onAfterInvoke);
-    if (parkEl2) return parkEl2;
     const el = createVnodeDomElement(rawTag);
     applyVnodeDomProps(el, rawTag, v.props, invokeHandler, onAfterInvoke);
     appendVnodeDomChildren(el, v.props, v.children, invokeHandler, onAfterInvoke);
@@ -2224,20 +2148,16 @@ export {
   documentFor,
   ensureStyleElement,
   getBootStatus,
-  getParkNativeBuilder,
   getThemes,
   hydrateVnode,
   installRelayHostFetch,
   installRumBeacon,
-  listParkNativeTags,
   localImportSpecs,
   looksLikeHookSource,
-  platformModuleCandidates,
   preloadImportClosure,
   promoteSsrShellWithoutWipe,
   propBoolFromVnodeProps,
   putModuleInMap,
-  registerParkNative,
   renderHook,
   renderHookErrorUI,
   replaceSsrPlaceholdersFromVnode,
@@ -2255,4 +2175,4 @@ export {
   vnodeToDom,
   yieldForInteractive
 };
-//# sourceMappingURL=relay-runtime-web-FWQVBWJI.js.map
+//# sourceMappingURL=relay-runtime-web-OYODJ7WY.js.map
